@@ -822,6 +822,14 @@ def upload_file():
             scrubbed_columns = []
             sensitive_headers = ['unit price', 'net price', 'customer address', 'address']
 
+            # Drop all sheets except RawData (SAP exports include many extra tabs)
+            target_sheet = 'RawData'
+            sheets_to_remove = [s for s in wb.sheetnames if s != target_sheet]
+            for sheet_name in sheets_to_remove:
+                del wb[sheet_name]
+            if sheets_to_remove:
+                print(f"[Scrub] Removed {len(sheets_to_remove)} extra sheet(s) from {filename}: {sheets_to_remove}")
+
             for ws in wb.worksheets:
                 cols_to_delete = []
                 for col_idx in range(1, ws.max_column + 1):
