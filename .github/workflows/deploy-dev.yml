@@ -67,7 +67,7 @@ jobs:
 
       - name: Deploy to Cloud Run (dev)
         run: |
-          gcloud run deploy estradabot-dev \
+          gcloud run deploy ddschedulerbot-dev \
             --source . \
             --region us-central1 \
             --allow-unauthenticated \
@@ -79,7 +79,7 @@ jobs:
 
       - name: Show dev URL
         run: |
-          URL=$(gcloud run services describe estradabot-dev \
+          URL=$(gcloud run services describe ddschedulerbot-dev \
             --region us-central1 \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --format='value(status.url)')

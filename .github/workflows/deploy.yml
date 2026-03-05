@@ -57,19 +57,34 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Create prod env.yaml
+        run: |
+          cat > env-prod.yaml << 'ENVEOF'
+          FLASK_ENV: "production"
+          USE_LOCAL_STORAGE: "false"
+          GCS_BUCKET: "ddschedulerbot-files"
+          SECRET_KEY: "${{ secrets.SECRET_KEY }}"
+          ADMIN_USERNAME: "${{ secrets.ADMIN_USERNAME }}"
+          ADMIN_PASSWORD: "${{ secrets.ADMIN_PASSWORD }}"
+          USERS: "${{ secrets.USERS }}"
+          BEHIND_PROXY: "true"
+          ENVEOF
+
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy estradabot \
+          gcloud run deploy ddschedulerbot \
             --source . \
             --region us-central1 \
             --allow-unauthenticated \
             --project ${{ secrets.GCP_PROJECT_ID }} \
+            --env-vars-file env-prod.yaml \
+            --service-account=969733401480-compute@developer.gserviceaccount.com \
             --quiet
 
       - name: Verify deployment
         run: |
           echo "Deployment complete. Verifying service is healthy..."
-          SERVICE_URL=$(gcloud run services describe estradabot \
+          SERVICE_URL=$(gcloud run services describe ddschedulerbot \
             --region us-central1 \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --format='value(status.url)')

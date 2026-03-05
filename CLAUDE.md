@@ -98,8 +98,8 @@ DynaBot/
 ## Key Conventions
 
 ### Git Workflow
-- **Production branch:** `master` — auto-deploys to `estradabot` Cloud Run service
-- **Development branch:** `dev` — auto-deploys to `estradabot-dev` Cloud Run service
+- **Production branch:** `master` — auto-deploys to `ddschedulerbot` Cloud Run service
+- **Development branch:** `dev` — auto-deploys to `ddschedulerbot-dev` Cloud Run service
 - **Feature branches:** `feat/<description>` or `fix/<description>` — PR into `dev`
 - **Claude agent branches:** `claude/<description>` — PR into `dev`
 - **Pull requests:** All changes go through `dev` first, then `dev` merges into `master` for production
@@ -109,7 +109,7 @@ DynaBot/
 - Always pull the latest before creating a new branch
 
 ### Dev Environment (Cloud)
-- **Dev Cloud Run service:** `estradabot-dev` (max 1 instance, scale-to-zero)
+- **Dev Cloud Run service:** `ddschedulerbot-dev` (max 1 instance, scale-to-zero)
 - **Dev GCS bucket:** `gs://ddschedulerbot-files-dev` (isolated from production data)
 - **Dev deploys:** Automatic on push to `dev` branch (tests run first)
 - **Production deploys:** Automatic on push to `master` (tests run first)
@@ -117,7 +117,7 @@ DynaBot/
 ### Safe Update Workflow (MVP 2.0+)
 1. Create a feature branch from `dev`: `git checkout -b feat/my-feature dev`
 2. Develop and test locally: `pytest tests/ -v`
-3. Push and PR into `dev` — CI runs tests, auto-deploys to `estradabot-dev`
+3. Push and PR into `dev` — CI runs tests, auto-deploys to `ddschedulerbot-dev`
 4. Team verifies on the dev Cloud Run URL
 5. When ready: merge `dev` into `master` — CI runs tests, auto-deploys to production
 
@@ -180,7 +180,7 @@ The app will be available at http://localhost:5000
 Deployment is done via Google Cloud Run from the repo root:
 
 ```bash
-gcloud run deploy estradabot --source . --region us-central1 --allow-unauthenticated
+gcloud run deploy ddschedulerbot --source . --region us-central1 --allow-unauthenticated
 ```
 
 ### Owner Direct Deploy (fast path)
