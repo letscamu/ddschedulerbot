@@ -64,6 +64,7 @@ jobs:
             --region us-central1 \
             --allow-unauthenticated \
             --project ${{ secrets.GCP_PROJECT_ID }} \
+            --service-account=969733401480-compute@developer.gserviceaccount.com \
             --quiet
 
       - name: Verify deployment
