@@ -1,4 +1,4 @@
-# EstradaBot - Claude Code Project Instructions
+# DynaBot - Claude Code Project Instructions
 
 ## Session Startup (MANDATORY)
 
@@ -47,12 +47,12 @@ If the branch is behind remote or has merge conflicts, do NOT begin work until t
 
 ## Project Overview
 
-**EstradaBot** is a discrete event simulation (DES) based production scheduling web application for stator manufacturing. It is deployed on Google Cloud Run with persistent storage via Google Cloud Storage.
+**DynaBot** is a discrete event simulation (DES) based production scheduling web application for stator manufacturing. It is deployed on Google Cloud Run with persistent storage via Google Cloud Storage.
 
-- **Repository:** https://github.com/InnerLooper85/EstradaBot.git
-- **Live site:** https://estradabot.biz
-- **GCP Project:** project-20e62326-f8a0-47bc-be6
-- **GCS Bucket:** gs://estradabot-files
+- **Repository:** https://github.com/letscamu/ddschedulerbot.git
+- **Live site:** https://dynabot.biz
+- **GCP Project:** ddschedulerbot
+- **GCS Bucket:** gs://ddschedulerbot-files
 - **Region:** us-central1
 
 ---
@@ -71,7 +71,7 @@ If the branch is behind remote or has merge conflicts, do NOT begin work until t
 ## Project Structure
 
 ```
-EstradaBot/
+DynaBot/
 ├── backend/
 │   ├── app.py                  # Flask application entry point
 │   ├── gcs_storage.py          # GCS helper module
@@ -110,7 +110,7 @@ EstradaBot/
 
 ### Dev Environment (Cloud)
 - **Dev Cloud Run service:** `estradabot-dev` (max 1 instance, scale-to-zero)
-- **Dev GCS bucket:** `gs://estradabot-files-dev` (isolated from production data)
+- **Dev GCS bucket:** `gs://ddschedulerbot-files-dev` (isolated from production data)
 - **Dev deploys:** Automatic on push to `dev` branch (tests run first)
 - **Production deploys:** Automatic on push to `master` (tests run first)
 
@@ -203,7 +203,7 @@ When the project owner says "deploy", "merge and deploy", "push to production", 
 3. Create a PR and get it reviewed/approved
 4. Merge via GitHub
 5. Coordinate with the team — only one deploy at a time
-6. Verify the live site after deployment: https://estradabot.biz
+6. Verify the live site after deployment: https://dynabot.biz
 
 ---
 
@@ -223,7 +223,7 @@ When the project owner says "deploy", "merge and deploy", "push to production", 
 
 ## Versioning Protocol (MANDATORY for production releases)
 
-**Current Version:** MVP 1.10.4
+**Current Version:** MVP 2.0.0
 
 ### Version Numbering: `X.Y.Z`
 
@@ -239,7 +239,7 @@ When merging changes to `master` that will be deployed to production, you MUST:
    - Bump Y (1.8 → 1.9) for feature additions, reset Z to 0
    - Bump X (1.x → 2.0) only when the product owner declares a new major release
 
-2. **Update the Update Log page** in `backend/templates/update_log.html`
+2. **Update the Flies and Swatters page** in `backend/templates/update_log.html`
    - Add a new version section at the top of the "Version History" card (above the previous version)
    - Include the version badge, date, and a short release name
    - List each change as a `<li class="list-group-item">` with a description

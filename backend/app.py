@@ -1,5 +1,5 @@
 """
-EstradaBot - Flask Web Application
+DynaBot - Flask Web Application
 With authentication and production deployment support
 """
 
@@ -1520,7 +1520,7 @@ def get_feedback():
 def export_feedback():
     """Export all feedback as downloadable JSON for dev sessions.
     Includes full feedback entries with attachment metadata.
-    Usage: curl -o feedback.json https://estradabot.biz/api/feedback/export
+    Usage: curl -o feedback.json https://dynabot.biz/api/feedback/export
     """
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
@@ -1541,7 +1541,7 @@ def export_feedback():
             status=200,
             mimetype='application/json'
         )
-        response.headers['Content-Disposition'] = 'attachment; filename=estradabot_feedback_export.json'
+        response.headers['Content-Disposition'] = 'attachment; filename=dynabot_feedback_export.json'
         return response
     except Exception as e:
         return jsonify({'error': str(e)}), 500

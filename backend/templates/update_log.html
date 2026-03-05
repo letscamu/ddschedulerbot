@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 
-{% block title %}Update Log - EstradaBot{% endblock %}
+{% block title %}Flies and Swatters - DynaBot{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-journal-text"></i> Update Log</h2>
-    <span class="badge bg-info fs-6">Current Version: MVP 1.11.1</span>
+    <h2><i class="bi bi-bug-fill"></i> Flies and Swatters</h2>
+    <span class="badge bg-info fs-6">Current Version: MVP 2.0.0</span>
 </div>
 
 <!-- Feedback Form -->
@@ -111,6 +111,28 @@
         <i class="bi bi-clock-history"></i> Version History
     </div>
     <div class="card-body">
+        <!-- MVP 2.0.0 -->
+        <div class="mb-4">
+            <h5>
+                <span class="badge bg-info">MVP 2.0.0</span>
+                <small class="text-muted ms-2">March 2026 - DynaBot: Full Rebrand &amp; New Home</small>
+            </h5>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <i class="bi bi-palette-fill text-primary"></i>
+                    <strong>Rebranded to DynaBot:</strong> The scheduling app is now DynaBot, live at dynabot.biz. All EstradaBot references have been updated throughout the interface.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-bug-fill text-danger"></i>
+                    <strong>Update Log renamed to Flies and Swatters:</strong> Consistent with CAMU branding — bugs are flies, fixes are swatters.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-cloud-fill text-info"></i>
+                    <strong>Infrastructure migration complete:</strong> Moved to the ddschedulerbot GCP project under the CAMU organization. CI/CD runs fully automated through GitHub Actions with Workload Identity Federation.
+                </li>
+            </ul>
+        </div>
+
         <!-- MVP 1.11 -->
         <div class="mb-4">
             <h5>
