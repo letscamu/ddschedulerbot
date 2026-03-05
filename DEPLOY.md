@@ -4,7 +4,7 @@
 
 | URL | Status |
 |-----|--------|
-| https://estradabot-983132566705.us-central1.run.app | Live (direct Cloud Run) |
+| https://estradabot-969733401480.us-central1.run.app | Live (direct Cloud Run — URL will update after first deploy) |
 | https://estradabot.biz | Live |
 | https://www.estradabot.biz | Live |
 
@@ -22,11 +22,14 @@
 
 ## Google Cloud Project
 
-- **Project ID:** project-20e62326-f8a0-47bc-be6
-- **Project Number:** 983132566705
+- **Project ID:** ddschedulerbot
+- **Project Number:** 969733401480
 - **Region:** us-central1
-- **GCS Bucket:** `gs://estradabot-files`
-- **Service Account:** `983132566705-compute@developer.gserviceaccount.com`
+- **GCP Account:** sean@figsocap.com (consultantbot.bar org)
+- **GCS Bucket (prod):** `gs://ddschedulerbot-files`
+- **GCS Bucket (dev):** `gs://ddschedulerbot-files-dev`
+- **Service Account:** `github-actions-sa@ddschedulerbot.iam.gserviceaccount.com`
+- **WIF Provider:** `projects/969733401480/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
 
 ## Architecture
 
@@ -52,28 +55,28 @@ Files persist in GCS across container restarts, deployments, and scaling events.
 ### Deploy Updates
 
 ```bash
-cd "C:\Users\SeanFilipow\.claude-worktrees\DD Scheduler Bot\mystifying-goldberg"
-gcloud run deploy estradabot --source . --region us-central1 --allow-unauthenticated
+cd "C:\Users\SeanFilipow\CAMU\ddschedulerbot"
+gcloud run deploy estradabot --source . --region us-central1 --allow-unauthenticated --project ddschedulerbot
 ```
 
 ### View Logs
 
 ```bash
-gcloud run logs read estradabot --region us-central1 --project=project-20e62326-f8a0-47bc-be6 --limit=50
+gcloud run logs read estradabot --region us-central1 --project=ddschedulerbot --limit=50
 ```
 
 ### Check Domain Status
 
 ```bash
-gcloud beta run domain-mappings describe --domain estradabot.biz --region us-central1 --project=project-20e62326-f8a0-47bc-be6
+gcloud beta run domain-mappings describe --domain estradabot.biz --region us-central1 --project=ddschedulerbot
 ```
 
 ### View GCS Bucket Contents
 
 ```bash
-gcloud storage ls gs://estradabot-files/uploads/
-gcloud storage ls gs://estradabot-files/outputs/
-gcloud storage ls gs://estradabot-files/state/
+gcloud storage ls gs://ddschedulerbot-files/uploads/
+gcloud storage ls gs://ddschedulerbot-files/outputs/
+gcloud storage ls gs://ddschedulerbot-files/state/
 ```
 
 ## DNS Configuration (Namecheap)
@@ -117,8 +120,8 @@ Environment variables are stored in `env.yaml` (not committed to git):
 The Cloud Run service account needs `storage.objectAdmin` on the GCS bucket. This was granted with:
 
 ```bash
-gcloud storage buckets add-iam-policy-binding gs://estradabot-files \
-  --member="serviceAccount:983132566705-compute@developer.gserviceaccount.com" \
+gcloud storage buckets add-iam-policy-binding gs://ddschedulerbot-files \
+  --member="serviceAccount:github-actions-sa@ddschedulerbot.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 ```
 
@@ -134,10 +137,10 @@ To stop and avoid all charges:
 
 ```bash
 # Delete the Cloud Run service
-gcloud run services delete estradabot --region us-central1 --project=project-20e62326-f8a0-47bc-be6
+gcloud run services delete estradabot --region us-central1 --project=ddschedulerbot
 
 # Optionally delete the GCS bucket and all files
-gcloud storage rm -r gs://estradabot-files
+gcloud storage rm -r gs://ddschedulerbot-files
 ```
 
 ## Files Overview

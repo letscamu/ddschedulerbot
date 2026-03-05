@@ -57,7 +57,7 @@ jobs:
           cat > env-dev.yaml << 'ENVEOF'
           FLASK_ENV: "development"
           USE_LOCAL_STORAGE: "false"
-          GCS_BUCKET: "estradabot-files-dev"
+          GCS_BUCKET: "ddschedulerbot-files-dev"
           SECRET_KEY: "${{ secrets.DEV_SECRET_KEY }}"
           ADMIN_USERNAME: "${{ secrets.DEV_ADMIN_USERNAME }}"
           ADMIN_PASSWORD: "${{ secrets.DEV_ADMIN_PASSWORD }}"
