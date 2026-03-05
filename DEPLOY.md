@@ -1,24 +1,30 @@
-# EstradaBot - Deployment Guide
+# DynaBot - Deployment Guide
 
 ## Live URLs
 
 | URL | Status |
 |-----|--------|
-| https://estradabot-969733401480.us-central1.run.app | Live (direct Cloud Run — URL will update after first deploy) |
-| https://estradabot.biz | Live |
-| https://www.estradabot.biz | Live |
+| https://estradabot-969733401480.us-central1.run.app | Live (direct Cloud Run URL) |
+| https://dynabot.biz | Live |
+| https://www.dynabot.biz | Live |
+
+## Dev URL
+
+| URL | Status |
+|-----|--------|
+| https://estradabot-dev-969733401480.us-central1.run.app | Live (dev environment) |
 
 ## User Accounts
 
 | Username | Role | Password Source |
 |----------|------|-----------------|
-| admin | Admin | See `env.yaml` (not committed) or GCP Secret Manager |
-| MfgEng | User | See `env.yaml` or GCP Secret Manager |
-| Planner | User | See `env.yaml` or GCP Secret Manager |
-| CustomerService | User | See `env.yaml` or GCP Secret Manager |
-| Guest | User | See `env.yaml` or GCP Secret Manager |
+| admin | Admin | GitHub secret `ADMIN_PASSWORD` |
+| MfgEng | User | GitHub secret `USERS` |
+| Planner | User | GitHub secret `USERS` |
+| CustomerService | User | GitHub secret `USERS` |
+| Guest | User | GitHub secret `USERS` |
 
-> **Note:** Passwords are managed through environment variables and should never be stored in version-controlled files. Ask the project admin for credentials.
+> **Note:** Passwords are managed through GitHub Actions secrets and injected at deploy time. Never store credentials in version-controlled files. Ask the project admin for credentials.
 
 ## Google Cloud Project
 
@@ -28,7 +34,10 @@
 - **GCP Account:** sean@figsocap.com (consultantbot.bar org)
 - **GCS Bucket (prod):** `gs://ddschedulerbot-files`
 - **GCS Bucket (dev):** `gs://ddschedulerbot-files-dev`
-- **Service Account:** `github-actions-sa@ddschedulerbot.iam.gserviceaccount.com`
+- **GitHub Org:** letscamu
+- **Repo:** https://github.com/letscamu/ddschedulerbot
+- **Deploy SA (CI/CD):** `github-actions-sa@ddschedulerbot.iam.gserviceaccount.com`
+- **Runtime SA (Cloud Run):** `969733401480-compute@developer.gserviceaccount.com`
 - **WIF Provider:** `projects/969733401480/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
 
 ## Architecture
@@ -37,12 +46,15 @@
 User Browser
     |
     v
+dynabot.biz (Namecheap DNS → Cloud Run domain mapping)
+    |
+    v
 Google Cloud Run (estradabot)
     |-- Flask web app (gunicorn, 2 workers, 4 threads)
     |-- Reads/writes files to GCS bucket
     |
     v
-Google Cloud Storage (estradabot-files)
+Google Cloud Storage (ddschedulerbot-files)
     |-- uploads/       <-- Uploaded input files (Core Mapping, Sales Order, etc.)
     |-- outputs/       <-- Generated reports (Master Schedule, BLAST, etc.)
     |-- state/         <-- Persisted schedule state (current_schedule.json)
@@ -50,25 +62,53 @@ Google Cloud Storage (estradabot-files)
 
 Files persist in GCS across container restarts, deployments, and scaling events. The last generated schedule is automatically restored when the container starts.
 
+## CI/CD
+
+Deployments are fully automated via GitHub Actions:
+
+- Push to `master` → runs tests → deploys to prod Cloud Run with prod env vars
+- Push to `dev` → runs tests → deploys to `estradabot-dev` Cloud Run with dev env vars
+
+All env vars (credentials, bucket names, etc.) are injected from GitHub Actions secrets at deploy time. No manual `gcloud` updates needed after deploys.
+
+### GitHub Secrets Required
+
+| Secret | Purpose |
+|--------|---------|
+| `GCP_PROJECT_ID` | GCP project ID (`ddschedulerbot`) |
+| `WIF_PROVIDER` | Workload Identity Federation provider resource name |
+| `WIF_SERVICE_ACCOUNT` | CI/CD service account email |
+| `SECRET_KEY` | Flask session encryption key |
+| `ADMIN_USERNAME` | Admin account username |
+| `ADMIN_PASSWORD` | Admin account password |
+| `USERS` | Additional users (`user:pass,user:pass` format) |
+| `DEV_SECRET_KEY` | Dev Flask session key |
+| `DEV_ADMIN_USERNAME` | Dev admin username |
+| `DEV_ADMIN_PASSWORD` | Dev admin password |
+| `DEV_USERS` | Dev additional users |
+
 ## Deployment Commands
 
-### Deploy Updates
+### Deploy Updates (manual)
 
 ```bash
 cd "C:\Users\SeanFilipow\CAMU\ddschedulerbot"
-gcloud run deploy estradabot --source . --region us-central1 --allow-unauthenticated --project ddschedulerbot
+gcloud run deploy estradabot --source . --region us-central1 --allow-unauthenticated \
+  --project ddschedulerbot \
+  --service-account=969733401480-compute@developer.gserviceaccount.com \
+  --env-vars-file env.yaml --quiet
 ```
 
 ### View Logs
 
 ```bash
-gcloud run logs read estradabot --region us-central1 --project=ddschedulerbot --limit=50
+gcloud run services logs read estradabot --region us-central1 --project=ddschedulerbot --limit=50
 ```
 
 ### Check Domain Status
 
 ```bash
-gcloud beta run domain-mappings describe --domain estradabot.biz --region us-central1 --project=ddschedulerbot
+gcloud beta run domain-mappings describe --domain dynabot.biz --region us-central1 --project=ddschedulerbot
 ```
 
 ### View GCS Bucket Contents
@@ -79,9 +119,9 @@ gcloud storage ls gs://ddschedulerbot-files/outputs/
 gcloud storage ls gs://ddschedulerbot-files/state/
 ```
 
-## DNS Configuration (Namecheap)
+## DNS Configuration (Namecheap — dynabot.biz)
 
-### Root Domain (estradabot.biz)
+### Root Domain
 
 | Type | Host | Value |
 |------|------|-------|
@@ -107,23 +147,31 @@ gcloud storage ls gs://ddschedulerbot-files/state/
 
 ## Environment Variables
 
-Environment variables are stored in `env.yaml` (not committed to git):
+Env vars are injected at deploy time from GitHub secrets. For local/manual deploys, create a local `env.yaml` (do not commit):
 
-- SECRET_KEY - Flask session encryption
-- ADMIN_USERNAME / ADMIN_PASSWORD - Admin account
-- USERS - Additional user accounts (format: `username1:password1,username2:password2`)
-- BEHIND_PROXY - Set to true for Cloud Run
-- GCS_BUCKET - GCS bucket name (default: `estradabot-files`)
+- `SECRET_KEY` - Flask session encryption
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` - Admin account
+- `USERS` - Additional user accounts (format: `username1:password1,username2:password2`)
+- `BEHIND_PROXY` - Set to `true` for Cloud Run
+- `GCS_BUCKET` - GCS bucket name (`ddschedulerbot-files` for prod, `ddschedulerbot-files-dev` for dev)
 
 ## IAM / Permissions
 
-The Cloud Run service account needs `storage.objectAdmin` on the GCS bucket. This was granted with:
+The Cloud Run **runtime** service account needs `storage.objectAdmin` on the GCS bucket:
 
 ```bash
 gcloud storage buckets add-iam-policy-binding gs://ddschedulerbot-files \
-  --member="serviceAccount:github-actions-sa@ddschedulerbot.iam.gserviceaccount.com" \
+  --member="serviceAccount:969733401480-compute@developer.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+
+gcloud storage buckets add-iam-policy-binding gs://ddschedulerbot-files-dev \
+  --member="serviceAccount:969733401480-compute@developer.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 ```
+
+The **CI/CD** service account (`github-actions-sa`) needs `roles/run.admin`, `roles/storage.admin`, and `roles/iam.serviceAccountUser` on the project.
+
+The org policy `iam.allowedPolicyMemberDomains` is overridden at the project level to allow `allUsers` on Cloud Run (required for public access).
 
 ## Cost Estimate
 
@@ -150,7 +198,7 @@ gcloud storage rm -r gs://ddschedulerbot-files
 | `Dockerfile` | Container build configuration (Python 3.11, gunicorn) |
 | `.dockerignore` | Files excluded from Docker build |
 | `.gcloudignore` | Files excluded from Cloud Build |
-| `env.yaml` | Environment variables (not in git) |
+| `env.yaml` | Environment variables for manual deploys (not in git) |
 | `requirements.txt` | Python dependencies |
 | `backend/app.py` | Flask web application |
 | `backend/gcs_storage.py` | Google Cloud Storage helper module |
