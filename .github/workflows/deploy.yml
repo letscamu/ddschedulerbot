@@ -63,7 +63,8 @@ jobs:
             --source . \
             --region us-central1 \
             --allow-unauthenticated \
-            --project ${{ secrets.GCP_PROJECT_ID }}
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --quiet
 
       - name: Verify deployment
         run: |

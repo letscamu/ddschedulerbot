@@ -73,7 +73,8 @@ jobs:
             --allow-unauthenticated \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --env-vars-file env-dev.yaml \
-            --max-instances=1
+            --max-instances=1 \
+            --quiet
 
       - name: Show dev URL
         run: |
