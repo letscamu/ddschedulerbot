@@ -35,7 +35,9 @@ def classify_product_type(part_number: Optional[str], description: Optional[str]
 
 
 def should_exclude_order(part_number: Optional[str], description: Optional[str],
-                         supply_source: Optional[str] = None) -> Optional[str]:
+                         supply_source: Optional[str] = None,
+                         work_order_status: Optional[str] = None,
+                         current_operation: Optional[str] = None) -> Optional[str]:
     """
     Determine if an order should be excluded from scheduling.
 
@@ -43,6 +45,8 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
         part_number: The part/material number
         description: Material description
         supply_source: Supply source field (e.g., 'Inventory')
+        work_order_status: SAP WO status string (e.g., 'TECO CNF ...')
+        current_operation: Current operation description (e.g., 'OSP Canada')
 
     Returns:
         Exclusion reason string if should be excluded, None if order should be included
@@ -51,10 +55,20 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     part_upper = str(part_number).upper().strip() if part_number else ''
     desc_upper = str(description).upper().strip() if description else ''
     supply_upper = str(supply_source).upper().strip() if supply_source else ''
+    wo_status_upper = str(work_order_status).upper().strip() if work_order_status else ''
+    current_op_upper = str(current_operation).upper().strip() if current_operation else ''
+
+    # Exclude TECO (Technically Complete) orders — already done, ready to ship
+    if wo_status_upper.startswith('TECO'):
+        return 'TECO (Complete)'
 
     # Exclude inventory orders
     if 'INVENTORY' in supply_upper:
         return 'Inventory'
+
+    # Exclude OSP Canada operations — done outside the process
+    if 'OSP CANADA' in current_op_upper:
+        return 'OSP Canada'
 
     # Exclude REPAIR parts
     if 'REPAIR' in part_upper or 'REPAIR' in desc_upper:

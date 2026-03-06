@@ -75,11 +75,14 @@ def export_master_schedule(scheduled_orders: List, output_path: str) -> str:
 
 
 def export_blast_schedule(scheduled_orders: List, output_path: str,
-                          reorder_sequence: List = None) -> str:
+                          reorder_sequence: List = None,
+                          currently_blasting: List = None) -> str:
     """
     Export the BLAST operation schedule (printable).
     If reorder_sequence is provided, orders are sorted by that sequence
     instead of by blast_date (manual override by planner).
+    If currently_blasting is provided, those WIP orders (already on the blaster)
+    are prepended at the top with status 'IN PROGRESS'.
     """
     orders_with_blast = [o for o in scheduled_orders if o.blast_date]
 
@@ -100,6 +103,28 @@ def export_blast_schedule(scheduled_orders: List, output_path: str,
         orders_with_blast.sort(key=lambda x: x.blast_date)
 
     data = []
+
+    # Prepend currently-blasting WIP orders at the top
+    if currently_blasting:
+        for seq, wip in enumerate(currently_blasting, 1):
+            op_start = wip.get('operation_start_date')
+            blast_date_str = op_start.strftime('%m/%d/%Y') if op_start else 'IN PROGRESS'
+            blast_time_str = op_start.strftime('%H:%M') if op_start else ''
+            row = {
+                'Seq': f'WIP-{seq}',
+                'WO#': wip.get('wo_number', ''),
+                'Part Number': wip.get('part_number', ''),
+                'Description': str(wip.get('description', ''))[:50] if wip.get('description') else '',
+                'Customer': '',
+                'Blast Date': blast_date_str,
+                'Blast Time': blast_time_str,
+                'Core Required': '',
+                'Supermarket Location': '',
+                'Special Instructions': 'Currently on blaster',
+                'Planned Desma': ''
+            }
+            data.append(row)
+
     for seq, order in enumerate(orders_with_blast, 1):
         row = {
             'Seq': seq,

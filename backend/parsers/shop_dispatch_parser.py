@@ -70,7 +70,7 @@ def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List
                             skipped_operation += 1
                             wo_num = str(row.get('Order', '')).strip() if pd.notna(row.get('Order')) else None
                             pn = str(row.get('Material', '')).strip() if pd.notna(row.get('Material')) else None
-                            if wo_num and pn:
+                            if wo_num:
                                 wip_order = {
                                     'wo_number': wo_num,
                                     'part_number': pn,

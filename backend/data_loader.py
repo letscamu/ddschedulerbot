@@ -87,7 +87,9 @@ class DataLoader:
             exclusion_reason = should_exclude_order(
                 order.get('part_number'),
                 order.get('description'),
-                order.get('supply_source')
+                order.get('supply_source'),
+                order.get('work_order_status'),
+                order.get('current_operation')
             )
 
             if exclusion_reason:
