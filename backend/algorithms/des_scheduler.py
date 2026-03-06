@@ -1779,7 +1779,6 @@ class DESScheduler:
                 creation_date=part.creation_date,
                 planned_desma=part.planned_desma,
                 priority=part.priority,
-                serial_number=part.serial_number,
                 special_instructions=part.special_instructions,
                 supermarket_location=part.supermarket_location,
                 days_idle=part.days_idle
