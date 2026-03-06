@@ -952,7 +952,8 @@ def _run_schedule_mode(loader, working_days, mode_label, temp_dir, timestamp,
 
     blast_filename = f'BLAST_Schedule_{mode_label}_{timestamp}.xlsx'
     blast_path = os.path.join(temp_dir, blast_filename)
-    export_blast_schedule(scheduled_orders, blast_path, currently_blasting=loader.wip_in_process_orders)
+    on_blaster = [o for o in loader.wip_in_process_orders if o.get('current_operation') == 1300]
+    export_blast_schedule(scheduled_orders, blast_path, currently_blasting=on_blaster)
     gcs_storage.upload_file(blast_path, blast_filename, gcs_storage.OUTPUTS_FOLDER)
     reports['blast'] = blast_filename
 
@@ -2705,7 +2706,8 @@ def generate_final_schedule():
 
         blast_filename = f'BLAST_Schedule_{mode_label}_{timestamp}.xlsx'
         blast_path = os.path.join(temp_dir, blast_filename)
-        export_blast_schedule(final_orders, blast_path, currently_blasting=loader.wip_in_process_orders)
+        on_blaster = [o for o in loader.wip_in_process_orders if o.get('current_operation') == 1300]
+        export_blast_schedule(final_orders, blast_path, currently_blasting=on_blaster)
         gcs_storage.upload_file(blast_path, blast_filename, gcs_storage.OUTPUTS_FOLDER)
         reports['blast'] = blast_filename
 

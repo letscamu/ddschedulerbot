@@ -1106,9 +1106,15 @@ class DESScheduler:
         # Import here to avoid circular dependency
         from algorithms.scheduler import ScheduledOrder, ScheduledOperation
 
-        start_date = start_date or datetime.now().replace(
-            hour=5, minute=30, second=0, microsecond=0
-        )
+        if start_date is None:
+            now = datetime.now()
+            today_shift_start = now.replace(hour=5, minute=30, second=0, microsecond=0)
+            if now <= today_shift_start:
+                # Before today's shift start — begin today
+                start_date = today_shift_start
+            else:
+                # After today's shift has started — begin at the next working day
+                start_date = self.work_config._next_working_day_start(now)
 
         self.current_time = start_date
         self.hot_list_entries = hot_list_entries or []

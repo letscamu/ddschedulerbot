@@ -82,9 +82,13 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     if desc_upper.startswith('STATOR, CUSTOMER'):
         return 'Stator Customer'
 
-    # Exclude rotors: R/C + digit pattern (e.g., R/C1234, RC1234)
-    if re.match(r'^R/?C\d', part_upper):
+    # Exclude rotors: R/C prefix (e.g., R/C1234, RC1234) or standalone C/R + digit (e.g., C675678, R800783)
+    if re.match(r'^[RC]\d', part_upper) or re.match(r'^R/?C\d', part_upper):
         return 'Rotor'
+
+    # Exclude bearings (not stators)
+    if 'BEARING' in desc_upper:
+        return 'Bearing'
 
     # Exclude housings/blanks
     housing_patterns = ['HSG', 'HOUSING', 'BLNK', 'BLANK']
