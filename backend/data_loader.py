@@ -90,7 +90,7 @@ class DataLoader:
                 order.get('description'),
                 order.get('supply_source'),
                 order.get('work_order_status'),
-                order.get('current_operation')
+                order.get('oso_op_description')
             )
 
             if exclusion_reason:

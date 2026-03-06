@@ -231,8 +231,8 @@ class ScheduledOrder:
     special_instructions: str = None  # From redline requests
     supermarket_location: str = None  # From DCP report
     days_idle: int = None  # From Shop Dispatch "Elapsed Days" (9999→0)
-    current_operation: str = None  # From Shop Dispatch - SAP op number when scheduled
-    current_work_center: str = None  # From Shop Dispatch - current WC / op description
+    oso_op_number: str = None  # From OSO "Operation Number" column
+    oso_op_description: str = None  # From OSO "Current Operation Description" column
 
 
 @dataclass
