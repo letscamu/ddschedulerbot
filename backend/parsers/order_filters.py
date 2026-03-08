@@ -80,6 +80,10 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     if wo_status_upper.startswith('TECO'):
         return 'TECO (Complete)'
 
+    # Exclude CRTD (Created, not yet released) orders — not ready for production
+    if 'CRTD' in wo_status_upper.split():
+        return 'CRTD (Not Released)'
+
     # Exclude inventory orders
     if 'INVENTORY' in supply_upper:
         return 'Inventory'

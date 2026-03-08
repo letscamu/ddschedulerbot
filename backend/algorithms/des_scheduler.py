@@ -1201,15 +1201,33 @@ class DESScheduler:
             part_number = order.get('part_number')
             part_data = self._get_part_data(part_number)
 
-            # Get core number
-            core_number = None
+            # Get core number from mapping
+            mapped_core = None
             if part_data:
                 core_num = part_data.get('core_number')
                 if core_num:
                     try:
-                        core_number = int(float(core_num))
+                        mapped_core = int(float(core_num))
                     except:
                         pass
+
+            # OSO core takes priority over mapping core when both are present
+            oso_core = None
+            raw_oso_core = order.get('core_number')
+            if raw_oso_core is not None:
+                try:
+                    oso_core = int(float(str(raw_oso_core).strip()))
+                except (ValueError, TypeError):
+                    pass
+
+            if oso_core is not None and mapped_core is not None and oso_core != mapped_core:
+                print(f"   [CORE OVERRIDE] WO {order.get('wo_number')} {part_number}: "
+                      f"OSO core {oso_core} overrides mapping core {mapped_core}")
+                core_number = oso_core
+            elif oso_core is not None:
+                core_number = oso_core
+            else:
+                core_number = mapped_core
 
             # Check if core exists in inventory
             if core_number is None:
@@ -1582,6 +1600,21 @@ class DESScheduler:
                     earliest_avail
                 )
                 current_slot = self.work_config.next_unblocked_time(next_slot)
+
+        # Debug: report any orders that could not be scheduled
+        if remaining_orders:
+            print(f"\n[DEBUG] {len(remaining_orders)} orders left unscheduled after blast arrival pass:")
+            for order_info in remaining_orders:
+                order = order_info['order']
+                core_num = order_info['core_number']
+                cores = self.core_inventory.get(core_num, [])
+                avail_times = [
+                    c['available_at'].strftime('%m/%d %H:%M') if c['available_at'] else 'NOW'
+                    for c in cores
+                ]
+                print(f"   WO {order.get('wo_number')} | {order.get('part_number')} | "
+                      f"core {core_num} | op {order.get('oso_op_number')} | "
+                      f"core availability: {avail_times}")
 
     def _run_simulation(self):
         """Run the discrete event simulation."""
