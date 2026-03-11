@@ -68,6 +68,7 @@ jobs:
           ADMIN_PASSWORD: "${{ secrets.ADMIN_PASSWORD }}"
           USERS: "${{ secrets.USERS }}"
           BEHIND_PROXY: "true"
+          TZ: "America/Chicago"
           ENVEOF
 
       - name: Deploy to Cloud Run

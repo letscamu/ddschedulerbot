@@ -34,3 +34,6 @@ Thumbs.db
 
 # Feedback pipeline output (contains user data pulled from production)
 feedback/
+
+# Debug fixture files (contain real client data — not for repo)
+debugging-test-uploads/

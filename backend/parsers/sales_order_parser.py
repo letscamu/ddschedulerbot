@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 import re
 
-from .order_filters import classify_product_type, should_exclude_order
+from .order_filters import classify_product_type, should_exclude_order, normalize_wo_number
 
 
 def extract_part_number_from_description(description: str) -> Optional[str]:
@@ -66,14 +66,7 @@ def parse_open_sales_order(filepath: str, sheet_name: str = 'OSO') -> List[Dict[
                 description = row.get('Material Description')
                 supply_source = row.get('Supply Source') if pd.notna(row.get('Supply Source')) else None
 
-                # Normalize WO number (remove .0 suffix from float conversion)
-                wo_number = None
-                if pd.notna(row.get('Work Order')):
-                    wo_raw = row['Work Order']
-                    if isinstance(wo_raw, float):
-                        wo_number = str(int(wo_raw))
-                    else:
-                        wo_number = str(wo_raw).replace('.0', '')
+                wo_number = normalize_wo_number(row.get('Work Order'))
 
                 # Create order dictionary using actual column names from SAP export
                 order = {
@@ -88,7 +81,8 @@ def parse_open_sales_order(filepath: str, sheet_name: str = 'OSO') -> List[Dict[
                     'serial_number': row.get('Serial Number'),
                     'quantity': row.get('Ordered Quantity', 1),
                     'work_order_status': row.get('Work Order Status'),
-                    'current_operation': row.get('Current Operation Description'),
+                    'oso_op_number': str(int(float(row.get('Operation Number')))) if pd.notna(row.get('Operation Number')) else None,
+                    'oso_op_description': row.get('Current Operation Description') if pd.notna(row.get('Current Operation Description')) else None,
                     'source': 'Sales Order'
                 }
 
@@ -120,7 +114,7 @@ def parse_open_sales_order(filepath: str, sheet_name: str = 'OSO') -> List[Dict[
                 # If operation >= 1300 and current operation contains "RUBBER REMOVAL"
                 is_rework = False
                 rework_lead_time_hours = 0
-                current_op = order.get('current_operation')
+                current_op = order.get('oso_op_description')
                 if current_op and pd.notna(current_op):
                     current_op_upper = str(current_op).upper()
                     if 'RUBBER REMOVAL' in current_op_upper or 'REMOV RB' in current_op_upper:

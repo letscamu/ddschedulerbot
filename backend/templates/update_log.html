@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-bug-fill"></i> Flies and Swatters</h2>
-    <span class="badge bg-info fs-6">Current Version: MVP 2.0.0</span>
+    <span class="badge bg-info fs-6">Current Version: MVP 2.0.1</span>
 </div>
 
 <!-- Feedback Form -->
@@ -111,6 +111,40 @@
         <i class="bi bi-clock-history"></i> Version History
     </div>
     <div class="card-body">
+        <!-- MVP 2.0.1 -->
+        <div class="mb-4">
+            <h5>
+                <span class="badge bg-info">MVP 2.0.1</span>
+                <small class="text-muted ms-2">March 2026 - Scheduler Fixes &amp; Data Quality</small>
+            </h5>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <i class="bi bi-bug-fill text-danger"></i>
+                    <strong>CRTD filter fix:</strong> Correctly excludes CRTD orders; OSO core override now applied before scheduling.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-bug-fill text-danger"></i>
+                    <strong>WO number normalization:</strong> SDR and OSO work order numbers are now normalized before matching, eliminating silent merge mismatches.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-tools text-warning"></i>
+                    <strong>BLAST schedule improvements:</strong> Op# and Current Op Description columns added; pre-blast delays from the Stators VSM are now applied at scheduling time.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-tools text-warning"></i>
+                    <strong>WIP core pre-marking overhaul:</strong> Op 1300 orders schedule as priority 0 (On Blaster); ops 1340–1620 pre-mark cores as occupied with elapsed-time subtraction.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-file-earmark-spreadsheet text-success"></i>
+                    <strong>Unscheduled Orders tab:</strong> All schedule exports now include a tab listing orders that could not be scheduled, with reason codes.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-bug-fill text-danger"></i>
+                    <strong>Misc fixes:</strong> Rotor/bearing filters, WIP blast display, scheduler start date, Special Requests WO UX, published badge, and Windows Unicode error in feedback pipeline.
+                </li>
+            </ul>
+        </div>
+
         <!-- MVP 2.0.0 -->
         <div class="mb-4">
             <h5>

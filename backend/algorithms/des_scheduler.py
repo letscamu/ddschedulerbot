@@ -44,9 +44,10 @@ class WorkScheduleConfig:
     - Configurable working days (e.g., Mon-Thu or Mon-Fri)
     - Per-day configurations (full/skeleton, day/night/both, takt override)
     - Handover: 30 minutes at shift start
-    - Breaks adjusted per shift length
+    - Breaks: 15 min at 9:00/15:00 (day), 21:00/3:00 (night)
+    - Lunch: 45 min at 11:00-11:45 (day), 23:00-23:45 (night)
     """
-    working_days: List[int] = field(default_factory=lambda: [0, 1, 2, 3])  # Mon-Thu
+    working_days: List[int] = field(default_factory=lambda: [0, 1, 2, 3])  # Mon-Thu (4-day default)
     shift_hours: int = 12  # 10 or 12 hour shifts
     shift1_start: int = 5   # 5 AM
     shift1_end: int = 17    # 5 PM (computed from shift_hours if using factory)
@@ -204,6 +205,7 @@ class WorkScheduleConfig:
             return [(day_start, day_end)]
 
         day_start = datetime.combine(date, datetime.min.time())
+        # Day shift handover (5:00-5:30)
         shift1_start = datetime.combine(date, datetime.min.time().replace(hour=self.shift1_start))
 
         # Per-day shift awareness
@@ -630,8 +632,9 @@ class PartState:
     description: str
     customer: str
     is_reline: bool
-    rubber_type: Optional[str]
-    core_number: Optional[int]
+    serial_number: Optional[str] = None  # MVP 1.1
+    rubber_type: Optional[str] = None
+    core_number: Optional[int] = None
     core_suffix: Optional[str] = None
 
     # Part-specific times
@@ -667,6 +670,10 @@ class PartState:
     # Days idle (from Shop Dispatch "Elapsed Days")
     days_idle: Optional[int] = None
 
+    # Current operation info from OSO (blank for orders not in the OSO)
+    oso_op_number: Optional[str] = None
+    oso_op_description: Optional[str] = None
+
     # Priority tier
     priority: str = 'Normal'  # Hot-ASAP, Hot-Dated, Rework, Normal, CAVO
 
@@ -701,7 +708,7 @@ class DESScheduler:
                  core_inventory: Dict, operations: Dict = None,
                  work_schedule: Any = None, working_days: List[int] = None,
                  shift_hours: int = 12, day_configs: Dict = None,
-                 takt_time_minutes: int = 30):
+                 takt_time_minutes: int = 30, wip_orders: List[Dict] = None):
         """
         Initialize the DES scheduler.
 
@@ -715,8 +722,11 @@ class DESScheduler:
             shift_hours: Shift length in hours (10 or 12). Defaults to 12.
             day_configs: Optional per-day shift configs (Dict[int, DayShiftConfig]).
             takt_time_minutes: Default takt time (1-120 min). Defaults to 30.
+            wip_orders: Orders currently in-process (already blasted, op >= 1300) used to
+                        pre-mark cores as in-use so the scheduler reflects real pipeline state.
         """
         self.orders = orders
+        self.wip_orders = wip_orders or []
         self.core_mapping = core_mapping
         self.core_inventory = self._init_core_inventory(core_inventory)
         self.operations = operations or {}
@@ -774,6 +784,121 @@ class DESScheduler:
     def _get_part_data(self, part_number: str) -> Optional[Dict]:
         """Get core mapping data for a part number."""
         return self.core_mapping.get(part_number)
+
+    def _initialize_wip_state(self, now: datetime):
+        """
+        Pre-mark cores for WIP orders currently in the production pipeline.
+
+        Orders in Shop Dispatch with op >= 1300 have already been blasted and are
+        flowing through injection/cure/quench. Their cores are physically in use and
+        must not be treated as available until the part returns from the pipeline.
+        """
+        marked = 0
+        for wip in self.wip_orders:
+            # Op 1300 = currently on blaster, core is available — scheduled as priority 0
+            try:
+                wip_op = int(float(wip.get('current_operation', 0)))
+            except (TypeError, ValueError):
+                wip_op = 0
+            if wip_op == 1300:
+                continue
+
+            part_number = wip.get('part_number')
+            part_data = self._get_part_data(part_number)
+            if not part_data:
+                continue
+
+            core_num = part_data.get('core_number')
+            if not core_num:
+                continue
+            try:
+                core_number = int(float(core_num))
+            except (TypeError, ValueError):
+                continue
+
+            if core_number not in self.core_inventory:
+                continue
+
+            remaining_hours = self._estimate_remaining_hours(wip, part_data, now)
+            return_time = self.work_config.advance_time(
+                now, remaining_hours, continue_during_breaks=False
+            )
+
+            # Claim the first unclaimed core of this number
+            for core in self.core_inventory[core_number]:
+                if core['available_at'] is None:
+                    core['available_at'] = return_time
+                    core['assigned_to'] = wip.get('wo_number', 'WIP')
+                    marked += 1
+                    break
+
+        print(f"   WIP-aware init: pre-marked {marked} cores as in-use")
+
+    def _estimate_remaining_hours(self, wip: Dict, part_data: Dict, now: datetime) -> float:
+        """
+        Estimate how many more hours a WIP order will hold its core, based on
+        the current SAP operation number.
+
+        SAP operation map:
+          1300       = BLAST
+          1340-1360  = TUBE PREP / CORE OVEN / ASSEMBLY
+          1380       = INJECTION
+          1600       = CURE
+          1610       = QUENCH
+          1620+      = DISASSEMBLY, CUTBACK, INSPECT (core returned)
+        """
+        injection_time = float(part_data.get('injection_time') or 0.5)
+        cure_time = float(part_data.get('cure_time') or 1.5)
+        quench_time = float(part_data.get('quench_time') or 0.75)
+        post_cure = 1.25  # disassembly + cleanup before core is free
+
+        op_start = wip.get('operation_start_date')
+
+        def elapsed_hours() -> float:
+            if op_start and hasattr(op_start, 'timestamp'):
+                return max(0.0, (now - op_start).total_seconds() / 3600)
+            return 0.0
+
+        try:
+            op_num = int(float(wip.get('current_operation', 0)))
+        except (TypeError, ValueError):
+            op_num = 0
+
+        if op_num == 1380:
+            # Currently at INJECTION — estimate remaining injection time
+            remaining_inj = max(0.0, injection_time - elapsed_hours())
+            return remaining_inj + cure_time + quench_time + post_cure
+
+        elif op_num == 1600:
+            # Currently at CURE
+            remaining_cure = max(0.0, cure_time - elapsed_hours())
+            return remaining_cure + quench_time + post_cure
+
+        elif op_num == 1610:
+            # Currently at QUENCH
+            remaining_quench = max(0.0, quench_time - elapsed_hours())
+            return remaining_quench + post_cure
+
+        elif op_num >= 1620:
+            # DISASSEMBLY or later — core returned very soon
+            return post_cure
+
+        elif op_num == 1340:
+            # Currently at TUBE PREP — blast done, still needs tube prep + downstream
+            tube_prep_time = 3.5
+            assembly_time = 0.2
+            remaining_tube_prep = max(0.0, tube_prep_time - elapsed_hours())
+            return remaining_tube_prep + assembly_time + injection_time + cure_time + quench_time + post_cure
+
+        elif op_num == 1360:
+            # Currently at ASSEMBLY — tube prep done, still needs assembly + downstream
+            assembly_time = 0.2
+            remaining_assembly = max(0.0, assembly_time - elapsed_hours())
+            return remaining_assembly + injection_time + cure_time + quench_time + post_cure
+
+        else:
+            # Unknown op (e.g. 1300 — should have been filtered in _initialize_wip_state)
+            return injection_time + cure_time + quench_time + post_cure
 
     def _generate_part_id(self) -> str:
         """Generate a unique part ID."""
@@ -1006,9 +1131,15 @@ class DESScheduler:
         # Import here to avoid circular dependency
         from algorithms.scheduler import ScheduledOrder, ScheduledOperation
 
-        start_date = start_date or datetime.now().replace(
-            hour=5, minute=30, second=0, microsecond=0
-        )
+        if start_date is None:
+            now = datetime.now()
+            today_shift_start = now.replace(hour=5, minute=30, second=0, microsecond=0)
+            if now <= today_shift_start:
+                # Before today's shift start — begin today
+                start_date = today_shift_start
+            else:
+                # After today's shift has started — begin at the next working day
+                start_date = self.work_config._next_working_day_start(now)
 
         self.current_time = start_date
         self.hot_list_entries = hot_list_entries or []
@@ -1021,6 +1152,10 @@ class DESScheduler:
         if self.hot_list_entries:
             print(f"Hot list entries: {len(self.hot_list_entries)}")
         print(f"{'='*70}")
+
+        # Pre-mark cores for WIP orders currently in the production pipeline
+        if self.wip_orders:
+            self._initialize_wip_state(datetime.now())
 
         # Step 1: Classify orders
         schedulable, pending = self._classify_orders()
@@ -1066,15 +1201,33 @@ class DESScheduler:
             part_number = order.get('part_number')
             part_data = self._get_part_data(part_number)
 
-            # Get core number
-            core_number = None
+            # Get core number from mapping
+            mapped_core = None
             if part_data:
                 core_num = part_data.get('core_number')
                 if core_num:
                     try:
-                        core_number = int(float(core_num))
+                        mapped_core = int(float(core_num))
                     except:
                         pass
+
+            # OSO core takes priority over mapping core when both are present
+            oso_core = None
+            raw_oso_core = order.get('core_number')
+            if raw_oso_core is not None:
+                try:
+                    oso_core = int(float(str(raw_oso_core).strip()))
+                except (ValueError, TypeError):
+                    pass
+
+            if oso_core is not None and mapped_core is not None and oso_core != mapped_core:
+                print(f"   [CORE OVERRIDE] WO {order.get('wo_number')} {part_number}: "
+                      f"OSO core {oso_core} overrides mapping core {mapped_core}")
+                core_number = oso_core
+            elif oso_core is not None:
+                core_number = oso_core
+            else:
+                core_number = mapped_core
 
             # Check if core exists in inventory
             if core_number is None:
@@ -1152,6 +1305,7 @@ class DESScheduler:
                 return (1, need_by_ts, date_req_ts, row_position)
 
         # Categorize orders
+        on_blaster_orders = []
         hot_list_asap = []
         hot_list_dated = []
         rework_orders = []
@@ -1162,8 +1316,12 @@ class DESScheduler:
             wo_number = o['order'].get('wo_number')
             customer = o['order'].get('customer', '') or ''
             is_rework = o['order'].get('is_rework', False)
+            existing_priority = o['order'].get('priority', '')
 
-            if wo_number in hot_list_lookup:
+            if existing_priority == 'On Blaster':
+                # Priority 0 — already on the blaster, locked in sequence
+                on_blaster_orders.append(o)
+            elif wo_number in hot_list_lookup:
                 entry = hot_list_lookup[wo_number]
                 # Propagate special_instructions from hot list/app requests
                 if entry.get('special_instructions'):
@@ -1184,7 +1342,7 @@ class DESScheduler:
                 o['order']['priority'] = 'Normal'
                 normal_orders.append(o)
 
-        # Sort each category
+        # Sort each category (on_blaster keeps its SDR order — already locked in sequence)
         hot_list_asap.sort(key=get_hot_list_sort_key)
         hot_list_dated.sort(key=get_hot_list_sort_key)
         rework_orders.sort(key=get_created_on)
@@ -1192,13 +1350,14 @@ class DESScheduler:
         cavo_orders.sort(key=get_created_on)
 
         print(f"   Priority breakdown:")
+        print(f"      On Blaster (priority 0): {len(on_blaster_orders)}")
         print(f"      Hot List ASAP: {len(hot_list_asap)}")
         print(f"      Hot List Dated: {len(hot_list_dated)}")
         print(f"      Rework: {len(rework_orders)}")
         print(f"      Normal: {len(normal_orders)}")
         print(f"      CAVO (low priority): {len(cavo_orders)}")
 
-        return hot_list_asap + hot_list_dated + rework_orders + normal_orders + cavo_orders
+        return on_blaster_orders + hot_list_asap + hot_list_dated + rework_orders + normal_orders + cavo_orders
 
     def _get_rubber_type_for_order(self, order_info: Dict) -> Optional[str]:
         """Get the effective rubber type for an order (including hot list override)."""
@@ -1333,6 +1492,12 @@ class DESScheduler:
                     blast_time = self.work_config.advance_time(
                         current_slot, rework_lead_time_hours
                     )
+                else:
+                    pre_blast_delay = order.get('pre_blast_delay_hours') or 0
+                    if pre_blast_delay > 0:
+                        blast_time = self.work_config.advance_time(
+                            current_slot, pre_blast_delay
+                        )
 
                 injection_time = (part_data.get('injection_time') if part_data else None) or 0.5
 
@@ -1357,7 +1522,9 @@ class DESScheduler:
                     priority=order.get('priority', 'Normal'),
                     special_instructions=order.get('special_instructions'),
                     supermarket_location=order.get('supermarket_location'),
-                    days_idle=order.get('days_idle')
+                    days_idle=order.get('days_idle'),
+                    oso_op_number=order.get('oso_op_number'),
+                    oso_op_description=order.get('oso_op_description')
                 )
 
                 self.parts[part_id] = part_state
@@ -1433,6 +1600,21 @@ class DESScheduler:
                     earliest_avail
                 )
                 current_slot = self.work_config.next_unblocked_time(next_slot)
+
+        # Debug: report any orders that could not be scheduled
+        if remaining_orders:
+            print(f"\n[DEBUG] {len(remaining_orders)} orders left unscheduled after blast arrival pass:")
+            for order_info in remaining_orders:
+                order = order_info['order']
+                core_num = order_info['core_number']
+                cores = self.core_inventory.get(core_num, [])
+                avail_times = [
+                    c['available_at'].strftime('%m/%d %H:%M') if c['available_at'] else 'NOW'
+                    for c in cores
+                ]
+                print(f"   WO {order.get('wo_number')} | {order.get('part_number')} | "
+                      f"core {core_num} | op {order.get('oso_op_number')} | "
+                      f"core availability: {avail_times}")
 
     def _run_simulation(self):
         """Run the discrete event simulation."""
@@ -1637,7 +1819,8 @@ class DESScheduler:
                 )
                 operations.append(sched_op)
 
-            # Calculate turnaround: Completion Date - WO Creation Date
+            # Calculate turnaround: Completion Date - WO Creation Date (for all order types)
+            # MVP 1.1: Unified turnaround logic (Pegging Report eliminated)
             turnaround_days = None
             if part.completion_time:
                 try:
@@ -1661,6 +1844,7 @@ class DESScheduler:
                 description=part.description,
                 customer=part.customer,
                 is_reline=part.is_reline,
+                serial_number=part.serial_number,
                 assigned_core=f"{part.core_number}-{part.core_suffix}" if part.core_number else None,
                 rubber_type=part.rubber_type,
                 operations=operations,
@@ -1673,10 +1857,11 @@ class DESScheduler:
                 creation_date=part.creation_date,
                 planned_desma=part.planned_desma,
                 priority=part.priority,
-                serial_number=part.serial_number,
                 special_instructions=part.special_instructions,
                 supermarket_location=part.supermarket_location,
-                days_idle=part.days_idle
+                days_idle=part.days_idle,
+                oso_op_number=part.oso_op_number,
+                oso_op_description=part.oso_op_description
             )
 
             self.scheduled_orders.append(scheduled)

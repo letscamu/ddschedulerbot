@@ -30,7 +30,8 @@
                     </button>
                 </div>
                 <div id="woSearchResults" class="list-group position-absolute" style="z-index:100; display:none; max-height:200px; overflow-y:auto;"></div>
-                <small class="text-muted" id="woStatus"></small>
+                <small id="woStatus"></small>
+                <small class="text-muted d-block mt-1">Search for a WO number, or type one directly if it's not in the current schedule.</small>
             </div>
             <div class="col-md-6 d-flex align-items-end">
                 <div id="woModeIndicator" class="alert alert-light py-1 px-3 mb-0 w-100" style="display:none;">
@@ -300,8 +301,14 @@
             .then(r => r.json())
             .then(data => {
                 allOrders = data.orders || [];
+                if (allOrders.length === 0) {
+                    $('#woStatus').html('<span class="text-muted"><i class="bi bi-info-circle"></i> No schedule loaded — type any WO number to submit a request</span>');
+                }
             })
-            .catch(() => { allOrders = []; });
+            .catch(() => {
+                allOrders = [];
+                $('#woStatus').html('<span class="text-muted"><i class="bi bi-info-circle"></i> Schedule unavailable — type any WO number to submit a request</span>');
+            });
     }
 
     let searchTimeout = null;
@@ -369,9 +376,9 @@
         $('#orderDetails').hide();
 
         // Mode B indicator
-        $('#woModeIndicator').show().removeClass('alert-success').addClass('alert-warning');
-        $('#woModeText').html('<i class="bi bi-question-circle mode-b-indicator"></i> <strong>Mode B</strong> — New incoming request (WO not in system yet)');
-        $('#woStatus').html('<span class="text-warning">WO not found — will be stored as placeholder for future matching</span>');
+        $('#woModeIndicator').show().removeClass('alert-success alert-warning').addClass('alert-info');
+        $('#woModeText').html('<i class="bi bi-pencil-square text-info"></i> <strong>WO ' + woNumber + '</strong> — Not in current schedule. You can still submit — the Planner will review and match this request.');
+        $('#woStatus').text('');
     }
 
     function resetOrderDetails() {

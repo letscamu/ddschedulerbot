@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from .order_filters import classify_product_type, should_exclude_order
+from .order_filters import classify_product_type, should_exclude_order, normalize_wo_number
 
 
 def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List[Dict[str, Any]], List[tuple]]:
@@ -32,6 +32,8 @@ def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List
         print(f"Columns found: {list(df.columns)}")
 
         orders = []
+        wip_in_process = []
+        on_blaster = []
         excluded = []
         errors = []
         skipped_operation = 0
@@ -60,18 +62,43 @@ def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List
                 # Get operation number and filter for < 1300 (pre-BLAST)
                 # UNLESS it's a rework order - those should be included regardless of operation
                 operation = row.get('Operation')
+                op_num = 0
                 if pd.notna(operation):
                     try:
                         op_num = int(operation)
-                        # Skip if operation >= 1300 AND NOT rework
                         if op_num >= 1300 and not is_rework:
                             skipped_operation += 1
+                            wo_num = normalize_wo_number(row.get('Order'))
+                            pn = str(row.get('Material', '')).strip() if pd.notna(row.get('Material')) else None
+                            if wo_num:
+                                wip_order = {
+                                    'wo_number': wo_num,
+                                    'part_number': pn,
+                                    'description': row.get('Description') if pd.notna(row.get('Description')) else None,
+                                    'current_operation': op_num,
+                                    'current_work_center': str(row.get('Curr.WC', '')).strip() if pd.notna(row.get('Curr.WC')) else None,
+                                    'remaining_work_centers': str(row.get('Remaining Work Centers', '')).strip() if pd.notna(row.get('Remaining Work Centers')) else None,
+                                    'days_idle': 0 if (pd.notna(row.get('Elapsed Days')) and row.get('Elapsed Days') == 9999)
+                                                  else (int(row.get('Elapsed Days')) if pd.notna(row.get('Elapsed Days')) else None),
+                                    'is_rework': False,
+                                }
+                                if pd.notna(row.get('Operation Start Date')):
+                                    try:
+                                        wip_order['operation_start_date'] = pd.to_datetime(row['Operation Start Date'])
+                                    except Exception:
+                                        pass
+                                if op_num == 1300:
+                                    # Currently on blaster — core is available, schedule as priority 0
+                                    on_blaster.append(wip_order)
+                                else:
+                                    # Post-blast pipeline — core is occupied until this op completes
+                                    wip_in_process.append(wip_order)
                             continue
                     except (ValueError, TypeError):
                         pass
 
                 # Extract fields
-                wo_number = str(row.get('Order', '')).strip() if pd.notna(row.get('Order')) else None
+                wo_number = normalize_wo_number(row.get('Order'))
                 part_number = str(row.get('Material', '')).strip() if pd.notna(row.get('Material')) else None
                 description = row.get('Description') if pd.notna(row.get('Description')) else None
 
@@ -129,7 +156,8 @@ def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List
 
         # Print summary
         print(f"\nShop Dispatch Parsing complete:")
-        print(f"  - Skipped (Operation >= 1300, non-rework): {skipped_operation}")
+        print(f"  - On blaster (op == 1300): {len(on_blaster)} orders (priority 0)")
+        print(f"  - WIP in-process (op > 1300): {len(wip_in_process)} orders")
         print(f"  - Excluded by filters: {len(excluded)}")
         print(f"  - Successfully parsed: {len(orders)} orders")
         print(f"  - Rework orders detected: {rework_count}")
@@ -140,7 +168,7 @@ def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List
             for error in errors[:10]:
                 print(f"  - {error}")
 
-        return orders, excluded
+        return orders, wip_in_process, on_blaster, excluded
 
     except Exception as e:
         print(f"Error reading Shop Dispatch file: {str(e)}")

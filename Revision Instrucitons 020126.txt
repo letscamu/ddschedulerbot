@@ -1,0 +1,747 @@
+# DISCRETE EVENT SIMULATION SCHEDULER - FULL IMPLEMENTATION
+
+Please implement a new Discrete Event Simulation (DES) based production scheduler. This is a significant rewrite that fixes a fundamental flaw in the current scheduler where parts queue at EACH operation, causing 90+ day completion times instead of ~12 hours.
+
+## THE PROBLEM WE'RE FIXING
+
+Current scheduler treats operations as sequential queues:
+- Order #1 completes in 17 hours ✓
+- Order #50 waits at EACH operation for #1-49 → 200+ hours ✗
+- Order #1000 → 3000+ hours ✗
+
+The production line is actually a PIPELINE where multiple parts flow through simultaneously. Each part should complete in 10-15 hours regardless of position.
+
+## IMPLEMENTATION OVERVIEW
+
+Create a new file: `backend/algorithms/des_scheduler.py`
+
+### 1. WORK SCHEDULE CONFIGURATION
+```python
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, time
+from typing import List, Dict, Tuple, Optional
+from enum import Enum
+import heapq
+
+@dataclass
+class WorkScheduleConfig:
+    """Production schedule configuration."""
+    days_per_week: int = 4              # Mon-Thu (weekday 0-3)
+    shift_length_hours: float = 12      # 12-hour shifts
+    num_shifts: int = 2
+    
+    shift1_start_hour: int = 5          # 5:00 AM
+    shift2_start_hour: int = 17         # 5:00 PM
+    
+    handover_minutes: int = 20          # First BLAST at 5:20
+    
+    lunch_duration_minutes: int = 45    # 11:00-11:45, 23:00-23:45
+    break_duration_minutes: int = 15    # 9:00, 15:00, 21:00, 3:00
+    
+    takt_time_minutes: int = 30         # Configurable takt time
+    
+    def get_working_days(self) -> List[int]:
+        """Return working weekdays (0=Monday)."""
+        return list(range(self.days_per_week))  # [0,1,2,3] for Mon-Thu
+    
+    def get_blocked_periods(self, date, shift: int) -> List[Tuple[datetime, datetime]]:
+        """Get blocked time periods (breaks/lunch/handover) for a shift."""
+        blocked = []
+        
+        if shift == 1:
+            # Handover: 5:00-5:20
+            start = datetime.combine(date, time(5, 0))
+            blocked.append((start, start + timedelta(minutes=self.handover_minutes)))
+            # Break 1: 9:00-9:15
+            blocked.append((datetime.combine(date, time(9, 0)), 
+                           datetime.combine(date, time(9, 15))))
+            # Lunch: 11:00-11:45
+            blocked.append((datetime.combine(date, time(11, 0)), 
+                           datetime.combine(date, time(11, 45))))
+            # Break 2: 15:00-15:15 (12-hr shift)
+            blocked.append((datetime.combine(date, time(15, 0)), 
+                           datetime.combine(date, time(15, 15))))
+        else:
+            # Handover: 17:00-17:20
+            start = datetime.combine(date, time(17, 0))
+            blocked.append((start, start + timedelta(minutes=self.handover_minutes)))
+            # Break 1: 21:00-21:15
+            blocked.append((datetime.combine(date, time(21, 0)), 
+                           datetime.combine(date, time(21, 15))))
+            # Lunch: 23:00-23:45
+            blocked.append((datetime.combine(date, time(23, 0)), 
+                           datetime.combine(date, time(23, 45))))
+            # Break 2: 3:00-3:15 (next day)
+            next_day = date + timedelta(days=1)
+            blocked.append((datetime.combine(next_day, time(3, 0)), 
+                           datetime.combine(next_day, time(3, 15))))
+        
+        return blocked
+    
+    def is_blocked_time(self, dt: datetime, for_cure_quench: bool = False) -> bool:
+        """Check if time is during a blocked period. CURE/QUENCH continue during breaks."""
+        if for_cure_quench:
+            return False  # Automated systems continue
+        
+        # Check if it's a working day
+        if dt.weekday() not in self.get_working_days():
+            return True
+        
+        # Determine which shift and get blocked periods
+        hour = dt.hour
+        if 5 <= hour < 17:
+            shift = 1
+        else:
+            shift = 2
+        
+        blocked_periods = self.get_blocked_periods(dt.date(), shift)
+        for start, end in blocked_periods:
+            if start <= dt < end:
+                return True
+        
+        return False
+    
+    def next_unblocked_time(self, dt: datetime, for_cure_quench: bool = False) -> datetime:
+        """Find next time that's not blocked."""
+        while self.is_blocked_time(dt, for_cure_quench):
+            dt += timedelta(minutes=1)
+        return dt
+```
+
+### 2. INJECTION MACHINE MODEL
+```python
+@dataclass
+class InjectionMachine:
+    """Represents a Desma injection machine."""
+    name: str
+    primary_rubber_types: List[str]
+    current_rubber: Optional[str] = None
+    available_at: Optional[datetime] = None
+    enabled: bool = True  # Can be disabled for maintenance
+    
+    def can_run_rubber(self, rubber_type: str) -> bool:
+        """Check if this machine can run a rubber type."""
+        return rubber_type in self.primary_rubber_types
+
+RUBBER_CHANGEOVER_TIME_HOURS = 1.0  # 1 hour to change rubber
+
+def create_injection_machines() -> List[InjectionMachine]:
+    """Create the 5 Desma injection machines."""
+    return [
+        InjectionMachine("Desma 1", ["HR"]),
+        InjectionMachine("Desma 2", ["HR"]),
+        InjectionMachine("Desma 3", ["XE"]),
+        InjectionMachine("Desma 4", ["XE"]),
+        InjectionMachine("Desma 5", ["XR", "XD", "XE", "HR"]),  # Flex machine
+    ]
+```
+
+### 3. STATION (OPERATION) MODEL
+```python
+@dataclass
+class Station:
+    """A production station/operation."""
+    name: str
+    cycle_time_hours: float  # 0 means variable (from part data)
+    setup_time_hours: float
+    num_machines: int
+    capacity_per_machine: int
+    continues_during_breaks: bool = False
+    concurrent_with: Optional[str] = None  # For TUBE PREP <-> CORE OVEN
+    
+    # State
+    queue: List[str] = field(default_factory=list)
+    in_process: Dict[str, datetime] = field(default_factory=dict)  # part_id -> completion_time
+    
+    def total_capacity(self) -> int:
+        return self.num_machines * self.capacity_per_machine
+
+def create_stations() -> Dict[str, Station]:
+    """Create all production stations."""
+    return {
+        'BLAST': Station('BLAST', 0.15, 0.1, 1, 1),
+        'TUBE PREP': Station('TUBE PREP', 3.5, 0.1, 1, 18, concurrent_with='CORE OVEN'),
+        'CORE OVEN': Station('CORE OVEN', 2.5, 0.1, 1, 12, concurrent_with='TUBE PREP'),
+        'ASSEMBLY': Station('ASSEMBLY', 0.2, 0.1, 1, 1),
+        'INJECTION': Station('INJECTION', 0, 0.09, 5, 1),  # Variable time, 5 machines
+        'CURE': Station('CURE', 0, 0.25, 1, 16, continues_during_breaks=True),  # Variable
+        'QUENCH': Station('QUENCH', 0, 0, 1, 16, continues_during_breaks=True),  # Variable
+        'DISASSEMBLY': Station('DISASSEMBLY', 0, 0.1, 1, 1),  # Variable
+        'BLD END CUTBACK': Station('BLD END CUTBACK', 0.25, 0.25, 2, 1),
+        'INJ END CUTBACK': Station('INJ END CUTBACK', 0.25, 0.25, 2, 1),
+        'CUT THREADS': Station('CUT THREADS', 1.0, 0.25, 1, 1),
+        'INSPECT': Station('INSPECT', 0.25, 0.05, 1, 1),
+    }
+
+# Routing by product type
+NEW_STATOR_ROUTING = [
+    'BLAST', 'TUBE PREP', 'CORE OVEN', 'ASSEMBLY', 'INJECTION',
+    'CURE', 'QUENCH', 'DISASSEMBLY', 'BLD END CUTBACK',
+    'INJ END CUTBACK', 'CUT THREADS', 'INSPECT'
+]
+
+RELINE_ROUTING = [
+    'BLAST', 'TUBE PREP', 'CORE OVEN', 'ASSEMBLY', 'INJECTION',
+    'CURE', 'QUENCH', 'DISASSEMBLY', 'BLD END CUTBACK',
+    'INJ END CUTBACK', 'INSPECT'  # No CUT THREADS for relines
+]
+```
+
+### 4. EVENT SYSTEM
+```python
+class EventType(Enum):
+    BLAST_ARRIVAL = "blast_arrival"
+    STATION_ENTRY = "station_entry"
+    STATION_COMPLETE = "station_complete"
+    CONCURRENT_READY = "concurrent_ready"  # Both TUBE PREP and CORE OVEN done
+
+@dataclass
+class SimEvent:
+    time: datetime
+    event_type: EventType
+    part_id: str
+    station: str
+    data: Dict = field(default_factory=dict)
+    
+    def __lt__(self, other):
+        return self.time < other.time
+```
+
+### 5. PART STATE TRACKING
+```python
+@dataclass
+class PartState:
+    """Tracks a part through the simulation."""
+    wo_number: str
+    part_number: str
+    is_reline: bool
+    rubber_type: str
+    injection_time: float
+    cure_time: float
+    quench_time: float
+    
+    blast_time: Optional[datetime] = None
+    completion_time: Optional[datetime] = None
+    current_station: Optional[str] = None
+    
+    # For concurrent operations
+    tube_prep_complete: Optional[datetime] = None
+    core_oven_complete: Optional[datetime] = None
+    
+    # Operation history for visual simulation
+    operation_history: List[Dict] = field(default_factory=list)
+```
+
+### 6. MAIN DES SCHEDULER CLASS
+```python
+class DESScheduler:
+    """Discrete Event Simulation production scheduler."""
+    
+    def __init__(self, orders: List[Dict], core_mapping: Dict,
+                 core_inventory: Dict, config: WorkScheduleConfig = None):
+        self.orders = orders
+        self.core_mapping = core_mapping
+        self.core_inventory = self._init_core_inventory(core_inventory)
+        self.config = config or WorkScheduleConfig()
+        
+        self.stations = create_stations()
+        self.injection_machines = create_injection_machines()
+        
+        self.event_queue: List[SimEvent] = []
+        self.parts: Dict[str, PartState] = {}
+        self.current_time: datetime = None
+        
+        # Results
+        self.scheduled_orders: List[ScheduledOrder] = []
+        self.pending_core_orders: List[Dict] = []
+    
+    def _init_core_inventory(self, inventory: Dict) -> Dict:
+        """Initialize core inventory with availability tracking."""
+        result = {}
+        for core_num, cores in inventory.items():
+            result[core_num] = []
+            for core in cores:
+                result[core_num].append({
+                    **core,
+                    'available_at': None,
+                    'assigned_to': None
+                })
+        return result
+    
+    def _get_part_data(self, part_number: str) -> Dict:
+        """Get part data from core mapping."""
+        return self.core_mapping.get(part_number, {})
+    
+    def _get_cycle_time(self, station_name: str, part_state: PartState) -> float:
+        """Get cycle time for a station, using variable times where needed."""
+        station = self.stations[station_name]
+        
+        if station.cycle_time_hours > 0:
+            return station.cycle_time_hours
+        
+        # Variable times
+        if station_name == 'INJECTION':
+            return part_state.injection_time
+        elif station_name == 'CURE':
+            return part_state.cure_time
+        elif station_name == 'QUENCH':
+            return part_state.quench_time
+        elif station_name == 'DISASSEMBLY':
+            return 2 * (part_state.cure_time + 0.1)
+        
+        return 0.5  # Default
+    
+    def _schedule_event(self, event: SimEvent):
+        """Add event to priority queue."""
+        heapq.heappush(self.event_queue, event)
+    
+    def _get_routing(self, is_reline: bool) -> List[str]:
+        """Get operation routing for part type."""
+        return RELINE_ROUTING if is_reline else NEW_STATOR_ROUTING
+    
+    def schedule_orders(self, start_date: datetime = None) -> List[ScheduledOrder]:
+        """Run the discrete event simulation."""
+        
+        start_date = start_date or datetime.now().replace(
+            hour=5, minute=20, second=0, microsecond=0
+        )
+        self.current_time = start_date
+        
+        print(f"\n{'='*70}")
+        print(f"DES SCHEDULER: {len(self.orders)} orders")
+        print(f"Start: {start_date}")
+        print(f"Takt: {self.config.takt_time_minutes} minutes")
+        print(f"{'='*70}")
+        
+        # Separate schedulable vs pending orders
+        schedulable, pending = self._classify_orders()
+        self.pending_core_orders = pending
+        
+        print(f"Schedulable: {len(schedulable)}, Pending core: {len(pending)}")
+        
+        # Schedule BLAST arrivals at takt intervals
+        self._schedule_blast_arrivals(schedulable, start_date)
+        
+        # Run simulation
+        events_processed = 0
+        while self.event_queue:
+            event = heapq.heappop(self.event_queue)
+            self.current_time = event.time
+            self._process_event(event)
+            events_processed += 1
+            
+            if events_processed % 10000 == 0:
+                print(f"  Processed {events_processed} events, time: {self.current_time}")
+        
+        # Collect results
+        self._collect_results()
+        
+        print(f"\nSimulation complete:")
+        print(f"  Events processed: {events_processed}")
+        print(f"  Orders scheduled: {len(self.scheduled_orders)}")
+        
+        return self.scheduled_orders
+    
+    def _classify_orders(self) -> Tuple[List[Dict], List[Dict]]:
+        """Separate orders into schedulable vs pending (no core)."""
+        schedulable = []
+        pending = []
+        
+        for order in self.orders:
+            part_number = order.get('part_number')
+            part_data = self._get_part_data(part_number)
+            
+            core_number = None
+            if part_data:
+                cn = part_data.get('core_number')
+                if cn:
+                    try:
+                        core_number = int(float(cn))
+                    except:
+                        pass
+            
+            if core_number and core_number in self.core_inventory:
+                schedulable.append({**order, 'core_number': core_number, 'part_data': part_data})
+            else:
+                reason = 'Core not in inventory' if core_number else 'No core mapping'
+                pending.append({**order, 'reason': reason})
+        
+        # Sort by FIFO (created_on), with CAVO last
+        def sort_key(o):
+            is_cavo = 'CAVO' in str(o.get('customer', '')).upper()
+            created = o.get('created_on')
+            ts = created.timestamp() if created else float('inf')
+            return (is_cavo, ts)
+        
+        schedulable.sort(key=sort_key)
+        
+        return schedulable, pending
+    
+    def _schedule_blast_arrivals(self, orders: List[Dict], start_time: datetime):
+        """Schedule orders to arrive at BLAST at takt intervals."""
+        takt = timedelta(minutes=self.config.takt_time_minutes)
+        current_blast_time = start_time
+        
+        for order in orders:
+            # Skip blocked times
+            current_blast_time = self.config.next_unblocked_time(current_blast_time)
+            
+            # Find available core
+            core_number = order['core_number']
+            core = self._find_available_core(core_number, current_blast_time)
+            
+            if not core:
+                # Defer until core available
+                earliest = self._get_earliest_core_availability(core_number)
+                if earliest:
+                    current_blast_time = max(current_blast_time, earliest)
+                    current_blast_time = self.config.next_unblocked_time(current_blast_time)
+                    core = self._find_available_core(core_number, current_blast_time)
+            
+            if core:
+                # Create part state
+                part_data = order['part_data']
+                is_reline = str(order.get('part_number', '')).startswith('XN')
+                
+                part_state = PartState(
+                    wo_number=order['wo_number'],
+                    part_number=order['part_number'],
+                    is_reline=is_reline,
+                    rubber_type=part_data.get('rubber_type', 'HR'),
+                    injection_time=part_data.get('injection_time', 0.5) or 0.5,
+                    cure_time=part_data.get('cure_time', 1.5) or 1.5,
+                    quench_time=part_data.get('quench_time', 0.75) or 0.75,
+                    blast_time=current_blast_time
+                )
+                self.parts[order['wo_number']] = part_state
+                
+                # Assign core
+                self._assign_core(core_number, core['suffix'], order['wo_number'], 
+                                 current_blast_time, part_data)
+                part_state.assigned_core = f"{core_number}-{core['suffix']}"
+                
+                # Schedule BLAST arrival
+                self._schedule_event(SimEvent(
+                    time=current_blast_time,
+                    event_type=EventType.BLAST_ARRIVAL,
+                    part_id=order['wo_number'],
+                    station='BLAST'
+                ))
+            
+            # Advance to next takt slot
+            current_blast_time += takt
+    
+    def _process_event(self, event: SimEvent):
+        """Process a simulation event."""
+        
+        if event.event_type == EventType.BLAST_ARRIVAL:
+            self._handle_station_entry(event)
+            
+        elif event.event_type == EventType.STATION_ENTRY:
+            self._handle_station_entry(event)
+            
+        elif event.event_type == EventType.STATION_COMPLETE:
+            self._handle_station_complete(event)
+            
+        elif event.event_type == EventType.CONCURRENT_READY:
+            self._handle_concurrent_ready(event)
+    
+    def _handle_station_entry(self, event: SimEvent):
+        """Part enters a station."""
+        part_id = event.part_id
+        station_name = event.station
+        part_state = self.parts[part_id]
+        station = self.stations[station_name]
+        
+        part_state.current_station = station_name
+        
+        # Calculate processing time
+        cycle_time = self._get_cycle_time(station_name, part_state)
+        setup_time = station.setup_time_hours
+        total_hours = cycle_time + setup_time
+        
+        # Handle injection machine selection
+        if station_name == 'INJECTION':
+            machine, avail_time, needs_changeover = self._select_injection_machine(
+                part_state.rubber_type, event.time
+            )
+            if machine:
+                if needs_changeover:
+                    total_hours += RUBBER_CHANGEOVER_TIME_HOURS
+                    machine.current_rubber = part_state.rubber_type
+                
+                start_time = max(event.time, avail_time or event.time)
+                start_time = self.config.next_unblocked_time(start_time)
+                
+                end_time = self._advance_time(start_time, total_hours, 
+                                              station.continues_during_breaks)
+                machine.available_at = end_time
+                
+                event.data['machine'] = machine.name
+        else:
+            start_time = event.time
+            end_time = self._advance_time(start_time, total_hours,
+                                          station.continues_during_breaks)
+        
+        # Record operation
+        part_state.operation_history.append({
+            'station': station_name,
+            'start': start_time,
+            'end': end_time,
+            'machine': event.data.get('machine')
+        })
+        
+        # Schedule completion
+        self._schedule_event(SimEvent(
+            time=end_time,
+            event_type=EventType.STATION_COMPLETE,
+            part_id=part_id,
+            station=station_name,
+            data=event.data
+        ))
+    
+    def _handle_station_complete(self, event: SimEvent):
+        """Part completes at a station."""
+        part_id = event.part_id
+        station_name = event.station
+        part_state = self.parts[part_id]
+        
+        # Handle concurrent operations (TUBE PREP / CORE OVEN)
+        if station_name == 'TUBE PREP':
+            part_state.tube_prep_complete = event.time
+            if part_state.core_oven_complete:
+                self._schedule_concurrent_ready(part_id)
+            return
+            
+        elif station_name == 'CORE OVEN':
+            part_state.core_oven_complete = event.time
+            if part_state.tube_prep_complete:
+                self._schedule_concurrent_ready(part_id)
+            return
+        
+        # Move to next station
+        routing = self._get_routing(part_state.is_reline)
+        current_idx = routing.index(station_name) if station_name in routing else -1
+        
+        if current_idx >= 0 and current_idx < len(routing) - 1:
+            next_station = routing[current_idx + 1]
+            
+            # Skip CORE OVEN entry - it's handled with TUBE PREP
+            if next_station == 'CORE OVEN':
+                next_station = routing[current_idx + 2] if current_idx + 2 < len(routing) else None
+            
+            if next_station:
+                next_time = self.config.next_unblocked_time(event.time)
+                self._schedule_event(SimEvent(
+                    time=next_time,
+                    event_type=EventType.STATION_ENTRY,
+                    part_id=part_id,
+                    station=next_station
+                ))
+        else:
+            # Part complete!
+            part_state.completion_time = event.time
+    
+    def _handle_concurrent_ready(self, event: SimEvent):
+        """Both TUBE PREP and CORE OVEN complete - move to ASSEMBLY."""
+        part_id = event.part_id
+        part_state = self.parts[part_id]
+        
+        ready_time = max(part_state.tube_prep_complete, part_state.core_oven_complete)
+        ready_time = self.config.next_unblocked_time(ready_time)
+        
+        self._schedule_event(SimEvent(
+            time=ready_time,
+            event_type=EventType.STATION_ENTRY,
+            part_id=part_id,
+            station='ASSEMBLY'
+        ))
+    
+    def _schedule_concurrent_ready(self, part_id: str):
+        """Schedule the CONCURRENT_READY event."""
+        part_state = self.parts[part_id]
+        ready_time = max(part_state.tube_prep_complete, part_state.core_oven_complete)
+        
+        self._schedule_event(SimEvent(
+            time=ready_time,
+            event_type=EventType.CONCURRENT_READY,
+            part_id=part_id,
+            station='ASSEMBLY'
+        ))
+    
+    def _advance_time(self, start: datetime, hours: float, 
+                      continues_during_breaks: bool = False) -> datetime:
+        """Advance time by hours, skipping blocked periods if needed."""
+        if hours <= 0:
+            return start
+        
+        remaining_minutes = hours * 60
+        current = start
+        
+        while remaining_minutes > 0.1:
+            if self.config.is_blocked_time(current, continues_during_breaks):
+                current = self.config.next_unblocked_time(current, continues_during_breaks)
+                continue
+            
+            # Find next blocked period or end of remaining time
+            next_block = self._find_next_blocked_time(current, continues_during_breaks)
+            
+            if next_block:
+                minutes_to_block = (next_block - current).total_seconds() / 60
+                if minutes_to_block >= remaining_minutes:
+                    current += timedelta(minutes=remaining_minutes)
+                    remaining_minutes = 0
+                else:
+                    remaining_minutes -= minutes_to_block
+                    current = next_block
+            else:
+                current += timedelta(minutes=remaining_minutes)
+                remaining_minutes = 0
+        
+        return current
+    
+    def _find_next_blocked_time(self, from_time: datetime, 
+                                 for_cure_quench: bool = False) -> Optional[datetime]:
+        """Find the next blocked period start time."""
+        # Simplified - just check next few hours
+        check_time = from_time
+        for _ in range(24 * 60):  # Check up to 24 hours ahead
+            if self.config.is_blocked_time(check_time, for_cure_quench):
+                return check_time
+            check_time += timedelta(minutes=1)
+        return None
+    
+    def _select_injection_machine(self, rubber_type: str, 
+                                   needed_at: datetime) -> Tuple[Optional[InjectionMachine], 
+                                                                  Optional[datetime], bool]:
+        """Select best injection machine for rubber type."""
+        candidates = []
+        
+        for machine in self.injection_machines:
+            if not machine.enabled:
+                continue
+            if not machine.can_run_rubber(rubber_type):
+                continue
+            
+            avail_time = machine.available_at or needed_at
+            if avail_time < needed_at:
+                avail_time = needed_at
+            
+            needs_changeover = machine.current_rubber and machine.current_rubber != rubber_type
+            is_primary = rubber_type in machine.primary_rubber_types[:2]  # First 2 are primary
+            
+            candidates.append({
+                'machine': machine,
+                'avail_time': avail_time,
+                'is_primary': is_primary,
+                'needs_changeover': needs_changeover
+            })
+        
+        if not candidates:
+            return None, None, False
+        
+        # Sort: primary machines first, then earliest, then no changeover
+        candidates.sort(key=lambda x: (not x['is_primary'], x['avail_time'], x['needs_changeover']))
+        
+        best = candidates[0]
+        return best['machine'], best['avail_time'], best['needs_changeover']
+    
+    # Core inventory methods (similar to existing scheduler)
+    def _find_available_core(self, core_number: int, needed_at: datetime):
+        """Find a core available at the needed time."""
+        if core_number not in self.core_inventory:
+            return None
+        
+        for core in self.core_inventory[core_number]:
+            if core['available_at'] is None or core['available_at'] <= needed_at:
+                return core
+        return None
+    
+    def _get_earliest_core_availability(self, core_number: int) -> Optional[datetime]:
+        """Get earliest time any core of this number is available."""
+        if core_number not in self.core_inventory:
+            return None
+        
+        earliest = None
+        for core in self.core_inventory[core_number]:
+            if core['available_at'] is None:
+                return None  # One is available now
+            if earliest is None or core['available_at'] < earliest:
+                earliest = core['available_at']
+        return earliest
+    
+    def _assign_core(self, core_number: int, suffix: str, wo_number: str,
+                     blast_start: datetime, part_data: Dict):
+        """Assign core and set return time."""
+        for core in self.core_inventory[core_number]:
+            if core['suffix'] == suffix:
+                # Calculate return time
+                return_time = self._calculate_core_return_time(blast_start, part_data)
+                core['available_at'] = return_time
+                core['assigned_to'] = wo_number
+                return
+    
+    def _calculate_core_return_time(self, blast_start: datetime, part_data: Dict) -> datetime:
+        """Calculate when core returns after full cycle."""
+        # Core lifecycle: OVEN -> ASSEMBLY -> INJECTION -> CURE -> QUENCH -> DISASSEMBLY -> CLEANING
+        OVEN_TIME = 2.5
+        ASSEMBLY_TAKT = 0.5
+        INJECTION_TIME = part_data.get('injection_time', 0.5) or 0.5
+        CURE_TIME = part_data.get('cure_time', 1.5) or 1.5
+        QUENCH_TIME = part_data.get('quench_time', 0.75) or 0.75
+        DISASSEMBLY_TAKT = 0.5
+        CLEANING_TIME = 0.75
+        
+        total_hours = (OVEN_TIME + ASSEMBLY_TAKT + INJECTION_TIME + 
+                       CURE_TIME + QUENCH_TIME + DISASSEMBLY_TAKT + CLEANING_TIME)
+        
+        return self._advance_time(blast_start, total_hours)
+    
+    def _collect_results(self):
+        """Convert part states to ScheduledOrder objects."""
+        for wo_number, part_state in self.parts.items():
+            if part_state.completion_time:
+                order = ScheduledOrder(
+                    wo_number=wo_number,
+                    part_number=part_state.part_number,
+                    description='',  # Fill from original order
+                    customer='',
+                    is_reline=part_state.is_reline,
+                    assigned_core=getattr(part_state, 'assigned_core', None),
+                    rubber_type=part_state.rubber_type,
+                    operations=[],  # Could populate from operation_history
+                    blast_date=part_state.blast_time,
+                    completion_date=part_state.completion_time,
+                    turnaround_days=None,
+                    promise_date=None,
+                    on_time=True,
+                    creation_date=None
+                )
+                
+                # Calculate turnaround and on-time
+                # (Fill in from original order data)
+                
+                self.scheduled_orders.append(order)
+```
+
+### 7. UPDATE EXPORTS AND MAIN ENTRY POINT
+
+Update `excel_exporter.py` to use the new DES scheduler and update the main test script.
+
+### 8. TESTING
+
+After implementation, verify:
+1. Parts complete in 10-15 hours (not 90+ days)
+2. ~40 parts complete per day
+3. First BLAST at 5:20 AM
+4. Breaks/lunch respected (except CURE/QUENCH)
+5. 4-day week (Mon-Thu)
+6. Injection machines assigned by rubber type
+
+## SUMMARY
+
+The key change is moving from sequential queue model to pipeline model where:
+- Parts flow through the line at takt intervals
+- Multiple parts are in-process simultaneously at different stations
+- Only true bottlenecks (INJECTION with limited machines) cause queuing
+- Expected completion: 10-15 hours per part

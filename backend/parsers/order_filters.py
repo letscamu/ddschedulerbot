@@ -7,6 +7,24 @@ import re
 from typing import Optional
 
 
+def normalize_wo_number(raw) -> Optional[str]:
+    """
+    Normalize a WO number to a clean integer string (e.g. '3000354899').
+
+    Handles floats from Excel reads ('3000354899.0'), padded strings, and None.
+    Used by all parsers to ensure consistent WO# format for cross-file matching.
+    """
+    if raw is None:
+        return None
+    raw_str = str(raw).strip()
+    if not raw_str or raw_str.lower() == 'nan':
+        return None
+    try:
+        return str(int(float(raw_str)))
+    except (ValueError, TypeError):
+        return raw_str or None
+
+
 def classify_product_type(part_number: Optional[str], description: Optional[str] = None) -> Optional[str]:
     """
     Classify an order's product type based on part number.
@@ -35,7 +53,9 @@ def classify_product_type(part_number: Optional[str], description: Optional[str]
 
 
 def should_exclude_order(part_number: Optional[str], description: Optional[str],
-                         supply_source: Optional[str] = None) -> Optional[str]:
+                         supply_source: Optional[str] = None,
+                         work_order_status: Optional[str] = None,
+                         current_operation: Optional[str] = None) -> Optional[str]:
     """
     Determine if an order should be excluded from scheduling.
 
@@ -43,6 +63,8 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
         part_number: The part/material number
         description: Material description
         supply_source: Supply source field (e.g., 'Inventory')
+        work_order_status: SAP WO status string (e.g., 'TECO CNF ...')
+        current_operation: Current operation description (e.g., 'OSP Canada')
 
     Returns:
         Exclusion reason string if should be excluded, None if order should be included
@@ -51,10 +73,24 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     part_upper = str(part_number).upper().strip() if part_number else ''
     desc_upper = str(description).upper().strip() if description else ''
     supply_upper = str(supply_source).upper().strip() if supply_source else ''
+    wo_status_upper = str(work_order_status).upper().strip() if work_order_status else ''
+    current_op_upper = str(current_operation).upper().strip() if current_operation else ''
+
+    # Exclude TECO (Technically Complete) orders — already done, ready to ship
+    if wo_status_upper.startswith('TECO'):
+        return 'TECO (Complete)'
+
+    # Exclude CRTD (Created, not yet released) orders — not ready for production
+    if 'CRTD' in wo_status_upper.split():
+        return 'CRTD (Not Released)'
 
     # Exclude inventory orders
     if 'INVENTORY' in supply_upper:
         return 'Inventory'
+
+    # Exclude OSP Canada operations — done outside the process
+    if 'OSP CANADA' in current_op_upper:
+        return 'OSP Canada'
 
     # Exclude REPAIR parts
     if 'REPAIR' in part_upper or 'REPAIR' in desc_upper:
@@ -68,9 +104,13 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     if desc_upper.startswith('STATOR, CUSTOMER'):
         return 'Stator Customer'
 
-    # Exclude rotors: R/C + digit pattern (e.g., R/C1234, RC1234)
-    if re.match(r'^R/?C\d', part_upper):
+    # Exclude rotors: R/C prefix (e.g., R/C1234, RC1234) or standalone C/R + digit (e.g., C675678, R800783)
+    if re.match(r'^[RC]\d', part_upper) or re.match(r'^R/?C\d', part_upper):
         return 'Rotor'
+
+    # Exclude bearings (not stators)
+    if 'BEARING' in desc_upper:
+        return 'Bearing'
 
     # Exclude housings/blanks
     housing_patterns = ['HSG', 'HOUSING', 'BLNK', 'BLANK']

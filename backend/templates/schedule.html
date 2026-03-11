@@ -13,6 +13,12 @@
             <button type="button" class="btn btn-sm btn-outline-secondary active" id="btn4day" onclick="switchMode('4day')">4-Day</button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="btn5day" onclick="switchMode('5day')">5-Day</button>
         </div>
+        <!-- Published/Draft badge -->
+        <span id="publishBadge" class="me-2" style="display: none;"></span>
+        <!-- Publish button (Planner/Admin only) -->
+        <button class="btn btn-sm btn-success me-2" id="publishBtn" style="display: none;" onclick="publishSchedule()">
+            <i class="bi bi-check2-circle"></i> Publish
+        </button>
         <button class="btn btn-outline-primary me-2" onclick="refreshSchedule()">
             <i class="bi bi-arrow-clockwise"></i> Refresh
         </button>
@@ -146,6 +152,21 @@
                         <th>Turnaround</th>
                         <th>Status</th>
                     </tr>
+                    <tr id="filterRow">
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                    </tr>
                 </thead>
                 <tbody id="scheduleTableBody">
                 </tbody>
@@ -202,6 +223,16 @@
     }
     .reorder-active #scheduleTable tbody tr {
         cursor: grab;
+    }
+    /* Column filter row styling */
+    #filterRow th {
+        padding: 4px 8px;
+        background-color: #f8f9fa;
+    }
+    #filterRow .form-select-sm,
+    #filterRow .form-control-sm {
+        font-size: 0.75rem;
+        padding: 2px 6px;
     }
 </style>
 {% endblock %}
@@ -285,7 +316,37 @@
                 // Update generated at timestamp and publisher
                 if (data.generated_at) {
                     const date = new Date(data.generated_at);
-                    $('#generatedAt').text('Generated: ' + date.toLocaleString());
+                    const modeLabel = data.mode === '5day' ? '5-Day' : '4-Day';
+                    $('#generatedAt').text('Generated: ' + date.toLocaleString() + ' (' + modeLabel + ')');
+                }
+
+                // MVP 1.1: Show/hide 4/5-day toggle
+                if (data.has_5day) {
+                    $('#dayToggle').show();
+                    currentMode = data.mode || '4day';
+                    $('#btn4day').toggleClass('active', currentMode === '4day');
+                    $('#btn5day').toggleClass('active', currentMode === '5day');
+                } else {
+                    $('#dayToggle').hide();
+                }
+
+                // MVP 1.1: Published/Draft status
+                if (data.is_published) {
+                    let pubInfo = 'Published';
+                    if (data.published_by) pubInfo += ' by ' + data.published_by;
+                    $('#publishBadge').html('<span class="badge bg-success">' + pubInfo + '</span>').show();
+                    $('#publishBtn').hide();  // Already published
+                } else if (data.can_publish && data.orders && data.orders.length > 0) {
+                    $('#publishBadge').html('<span class="badge bg-warning text-dark">Draft</span>').show();
+                    $('#publishBtn').show();
+                } else if (data.orders && data.orders.length > 0) {
+                    // Regular user seeing published schedule — badge already set above
+                    // If they got here, there's no published schedule and they can't publish
+                    $('#publishBadge').html('<span class="badge bg-secondary">No Published Schedule</span>').show();
+                    $('#publishBtn').hide();
+                } else {
+                    $('#publishBadge').hide();
+                    $('#publishBtn').hide();
                 }
                 if (data.published_by) {
                     $('#publishedBy').html('<i class="bi bi-person-check"></i> Published by: <strong>' + data.published_by + '</strong>');
@@ -578,6 +639,28 @@
 
     function refreshSchedule() {
         loadSchedule();
+    }
+
+    function publishSchedule() {
+        if (!confirm('Publish this schedule? All users will see this version.')) return;
+
+        fetch('/api/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Schedule published successfully!');
+                loadSchedule();  // Refresh to show published status
+            } else {
+                showToast(data.error || 'Failed to publish', 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Error: ' + error.message, 'error');
+        });
     }
 </script>
 {% endblock %}

@@ -64,6 +64,7 @@
                             <td><span class="badge bg-secondary">Optional</span></td>
                             <td>Work center operations and routing data</td>
                         </tr>
+                        <!-- Pegging Report removed in MVP 1.1 -->
                         <tr>
                             <td><i class="bi bi-file-earmark-excel text-warning"></i> Hot List</td>
                             <td><code>HOT LIST*.xlsx</code></td>
@@ -133,6 +134,8 @@
                             <span class="badge bg-secondary"><i class="bi bi-dash"></i></span>
                         {% endif %}
                     </div>
+
+                    <!-- Pegging Report removed in MVP 1.1 -->
 
                     <!-- Hot List -->
                     <div class="list-group-item d-flex justify-content-between align-items-center px-0">
@@ -293,6 +296,7 @@
         const lower = filename.toLowerCase().replace(/_/g, ' ');
         if (lower.includes('open sales order') || lower.startsWith('oso')) return 'sales_order';
         if (lower.includes('shop dispatch') || lower.startsWith('sdr')) return 'shop_dispatch';
+        // Pegging Report removed in MVP 1.1
         if (lower.includes('hot list')) return 'hot_list';
         if (lower.includes('dcpreport') || lower.includes('dcp report')) return 'dcp_report';
         if (lower.includes('core mapping')) return 'core_mapping';

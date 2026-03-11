@@ -312,6 +312,7 @@ def get_uploaded_files_info() -> Dict[str, Optional[Dict]]:
         elif 'shop dispatch' in fname_lower or fname_lower.startswith('sdr'):
             if files['shop_dispatch'] is None or file_info['modified'] > files['shop_dispatch']['modified']:
                 files['shop_dispatch'] = file_info
+        # Pegging Report removed in MVP 1.1
         elif 'hot list' in fname_lower or 'hot_list' in fname_lower:
             if files['hot_list'] is None or file_info['modified'] > files['hot_list']['modified']:
                 files['hot_list'] = file_info

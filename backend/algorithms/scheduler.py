@@ -214,6 +214,7 @@ class ScheduledOrder:
     description: str
     customer: str
     is_reline: bool
+    serial_number: str = None  # MVP 1.1: From Open Sales Order
     assigned_core: str = None  # e.g., "427-A"
     rubber_type: str = None
     operations: List[ScheduledOperation] = field(default_factory=list)
@@ -230,6 +231,8 @@ class ScheduledOrder:
     special_instructions: str = None  # From redline requests
     supermarket_location: str = None  # From DCP report
     days_idle: int = None  # From Shop Dispatch "Elapsed Days" (9999→0)
+    oso_op_number: str = None  # From OSO "Operation Number" column
+    oso_op_description: str = None  # From OSO "Current Operation Description" column
 
 
 @dataclass
