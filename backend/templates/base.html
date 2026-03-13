@@ -265,9 +265,6 @@
                     <a class="nav-link {% if request.endpoint == 'planner_page' %}active{% endif %}" href="/planner">
                         <i class="bi bi-clipboard-check"></i> Planner Workflow
                     </a>
-                    <a class="nav-link" href="#" onclick="generateSchedule(); return false;">
-                        <i class="bi bi-gear"></i> Generate Schedule
-                    </a>
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.role == 'admin' %}
                     <a class="nav-link {% if request.endpoint == 'user_management_page' %}active{% endif %}" href="/user-management">

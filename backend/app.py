@@ -543,9 +543,10 @@ def api_core_mapping():
         # Download files and load data
         import tempfile
         temp_dir = tempfile.mkdtemp(prefix='estradabot_core_')
-        local_paths = gcs_storage.download_files_for_processing(temp_dir)
+        gcs_storage.download_files_for_processing(temp_dir)
 
-        loader = DataLoader(local_paths)
+        loader = DataLoader(data_dir=temp_dir)
+        loader.load_all()
 
         # Build mapping records
         mapping_records = []
@@ -2065,6 +2066,11 @@ def simulate_custom_scenario():
             'orders': result['orders'],
             'baseline_orders': result['baseline_orders'],
             'reports': result['reports'],
+            'config': {
+                'working_days': working_days,
+                'shift_hours': shift_hours,
+                'day_configs': day_configs,
+            },
         }
 
         # Store in planner state alongside standard scenarios
@@ -2410,7 +2416,15 @@ def simulate_with_requests():
 
     try:
         scenario_key = planner_state['base_scenario']
-        config = SCENARIO_CONFIGS[scenario_key]
+        if scenario_key == 'custom':
+            custom_scenario = planner_state.get('scenarios', {}).get('custom', {})
+            custom_config = custom_scenario.get('config', {})
+            config = {
+                'working_days': custom_config.get('working_days', [0, 1, 2, 3]),
+                'shift_hours': custom_config.get('shift_hours', 12),
+            }
+        else:
+            config = SCENARIO_CONFIGS[scenario_key]
 
         # Gather approved special requests and combine with hot list entries
         all_requests = gcs_storage.load_special_requests()
@@ -2639,7 +2653,15 @@ def generate_final_schedule():
 
     try:
         scenario_key = planner_state['base_scenario']
-        config = SCENARIO_CONFIGS[scenario_key]
+        if scenario_key == 'custom':
+            custom_scenario = planner_state.get('scenarios', {}).get('custom', {})
+            custom_config = custom_scenario.get('config', {})
+            config = {
+                'working_days': custom_config.get('working_days', [0, 1, 2, 3]),
+                'shift_hours': custom_config.get('shift_hours', 12),
+            }
+        else:
+            config = SCENARIO_CONFIGS[scenario_key]
 
         # Build hot list from file entries + approved app requests only
         all_requests = gcs_storage.load_special_requests()

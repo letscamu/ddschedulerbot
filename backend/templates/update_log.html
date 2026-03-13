@@ -827,13 +827,13 @@
                     }
 
                     const devStatus = fb.dev_status || 'unprocessed';
-                    const devStatusColors = {
-                        'unprocessed': 'bg-secondary',
-                        'ingested': 'bg-info',
-                        'actioned': 'bg-primary',
-                        'closed': 'bg-dark'
-                    };
-                    const devBadge = devStatusColors[devStatus] || 'bg-secondary';
+                    const devStatusOptions = [
+                        {value: 'unprocessed', label: 'unprocessed', color: 'bg-secondary'},
+                        {value: 'ingested', label: 'ingested', color: 'bg-info'},
+                        {value: 'actioned', label: 'actioned', color: 'bg-primary'},
+                        {value: 'closed', label: 'closed', color: 'bg-dark'}
+                    ];
+                    const devBadge = (devStatusOptions.find(o => o.value === devStatus) || devStatusOptions[0]).color;
 
                     html += `<tr>
                         <td class="small">${date}</td>
@@ -841,7 +841,11 @@
                         <td><span class="badge ${categoryClass}">${fb.category}</span></td>
                         <td class="${priorityClass}">${fb.priority}</td>
                         <td>${statusCell}</td>
-                        <td><span class="badge ${devBadge}" style="font-size: 0.7rem;">${devStatus}</span></td>
+                        <td>
+                            <select class="form-select form-select-sm dev-status-select" data-index="${index}" style="font-size: 0.7rem; padding: 2px 4px; width: auto;">
+                                ${devStatusOptions.map(o => `<option value="${o.value}" ${o.value === devStatus ? 'selected' : ''}>${o.label}</option>`).join('')}
+                            </select>
+                        </td>
                         <td>${fb.page || '-'}</td>
                         <td>${fb.message.substring(0, 100)}${fb.message.length > 100 ? '...' : ''}</td>
                         <td>${fileCell}</td>
@@ -874,6 +878,32 @@
         })
         .catch(error => alert('Error: ' + error.message));
     }
+
+    function updateDevStatus(index, newStatus) {
+        fetch(`/api/feedback/${index}/dev-status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dev_status: newStatus })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Error: ' + (data.error || 'Unknown error'));
+                loadFeedback();
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error.message);
+            loadFeedback();
+        });
+    }
+
+    // Delegate change events for dev status dropdowns
+    document.getElementById('feedbackList').addEventListener('change', function(e) {
+        if (e.target.classList.contains('dev-status-select')) {
+            updateDevStatus(e.target.dataset.index, e.target.value);
+        }
+    });
 
     // Load on page load
     loadFeedback();
