@@ -173,7 +173,7 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-calendar-check"></i> DynaBot
-                <span class="badge bg-info ms-1" style="font-size: 0.55rem; vertical-align: middle;">MVP 2.0.1</span>
+                <span class="badge bg-info ms-1" style="font-size: 0.55rem; vertical-align: middle;">MVP 2.0.2</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -264,9 +264,6 @@
                     {% if current_user.is_authenticated and current_user.role in ['admin', 'planner'] %}
                     <a class="nav-link {% if request.endpoint == 'planner_page' %}active{% endif %}" href="/planner">
                         <i class="bi bi-clipboard-check"></i> Planner Workflow
-                    </a>
-                    <a class="nav-link" href="#" onclick="generateSchedule(); return false;">
-                        <i class="bi bi-gear"></i> Generate Schedule
                     </a>
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.role == 'admin' %}

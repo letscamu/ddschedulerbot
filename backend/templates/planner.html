@@ -169,7 +169,11 @@
         </div>
 
         <!-- Pending Requests List -->
-        <h6 class="mt-3 mb-2">Pending Special Requests</h6>
+        <hr class="my-3">
+        <h6 class="mb-2">
+            <i class="bi bi-exclamation-triangle text-info"></i> Pending Special Requests
+            <small class="text-muted fw-normal ms-2">Use checkboxes below to approve or reject</small>
+        </h6>
         <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
             <table class="table table-sm table-hover" id="requestsTable">
                 <thead class="table-light">
@@ -204,25 +208,19 @@
         <!-- Shown when no pending requests exist -->
         <div id="noRequestsContinue" class="text-center py-3" style="display: none;">
             <p class="text-muted mb-2">No special requests to review. You can proceed to generate the final schedule.</p>
-            <button class="btn btn-primary" onclick="simulateWithRequests()">
-                <i class="bi bi-arrow-right-circle"></i> Continue to Generate Final
+            <button class="btn btn-primary" onclick="generateFinal()">
+                <i class="bi bi-arrow-right-circle"></i> Generate Final Schedule
             </button>
         </div>
     </div>
 </div>
 
-<!-- Step 5: Generate Final Schedule -->
+<!-- Step 5: Final Schedule Results -->
 <div class="card mb-4" id="finalCard" style="display: none;">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header">
         <span><i class="bi bi-calendar-check"></i> Final Schedule</span>
-        <button class="btn btn-warning btn-sm" onclick="generateFinal()">
-            <i class="bi bi-gear"></i> Generate Final Schedule
-        </button>
     </div>
     <div class="card-body">
-        <div id="finalPlaceholder" class="text-center py-3 text-muted">
-            <p>Review and approve special requests above, then generate the final schedule.</p>
-        </div>
         <div id="finalResults" style="display: none;">
             <div class="row mb-3">
                 <div class="col-md-2">
