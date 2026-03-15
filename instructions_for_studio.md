@@ -1,62 +1,55 @@
-# ZBook ↔ Mac Studio Setup Instructions
+# ZBook (Defiant) ↔ Mac Studio (Mothership) — Setup Complete
 
-## 1. Test SSH from the Mac Studio
+## What's Working (as of 2026-03-15)
 
+### SSH (key-based auth, no password)
 ```bash
 ssh seanfilipow@192.168.86.33
 ```
 
-**SSH fingerprint prompt:** Just type `yes` — you're on your own local network, no risk.
-
-## 2. SSH Password Issue
-
-The ZBook uses an Azure AD account (`azuread\seanfilipow`), not a local account, so password-based SSH won't work directly.
-
-**Fix: Set up SSH key-based auth.**
-
-### On the Mac Studio:
-
-Check if you already have a key:
-```bash
-ls ~/.ssh/*.pub
-```
-
-If no key exists, generate one:
-```bash
-ssh-keygen -t ed25519 -C "studio@defiant"
-```
-Hit Enter through all prompts (no passphrase needed for local network).
-
-### Copy the public key to the ZBook:
-
-Display the key on the Studio:
-```bash
-cat ~/.ssh/id_ed25519.pub
-```
-
-On the ZBook (admin PowerShell), paste it into the authorized_keys file:
-```powershell
-# For Azure AD accounts, use the administrators_authorized_keys file:
-Add-Content -Path "C:\ProgramData\ssh\administrators_authorized_keys" -Value "PASTE_KEY_HERE"
-
-# Fix permissions:
-icacls "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "SYSTEM:(F)" /grant "Administrators:(F)"
-```
-
-Then retry from the Studio:
-```bash
-ssh seanfilipow@192.168.86.33
-```
-
-## 3. Test Ollama from the Mac Studio
-
-Once SSH works (or even without it — Ollama uses HTTP, not SSH):
-
+### Ollama API
 ```bash
 curl http://192.168.86.33:11434/api/generate \
   -d '{"model": "llama3.1", "prompt": "Hello", "stream": false}'
 ```
 
-**Note:** Ollama needs to be running on the ZBook and listening on `0.0.0.0` (not just localhost). If the curl fails, check on the ZBook:
-- Is Ollama running? (`ollama list` in a terminal)
-- Set `OLLAMA_HOST=0.0.0.0` environment variable so it listens on all interfaces, then restart Ollama.
+---
+
+## Setup Notes (for reference if you need to redo this)
+
+### The Problem
+- ZBook uses Azure AD (`azuread\seanfilipow`), which Windows SSH doesn't recognize
+- Had to create a **local** `seanfilipow` account for SSH
+
+### What Was Done on the ZBook (Admin PowerShell)
+
+1. **Created local account:**
+   ```powershell
+   net user seanfilipow Temp1234 /add
+   net localgroup Administrators seanfilipow /add
+   ```
+
+2. **Wrote SSH key to the correct home directory** (`seanfilipow.DEFIANT`, not `seanfilipow`):
+   ```powershell
+   New-Item -Path "C:\Users\seanfilipow.DEFIANT\.ssh" -ItemType Directory -Force
+   Set-Content -Path "C:\Users\seanfilipow.DEFIANT\.ssh\authorized_keys" -Value "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOl/DknTAwb+Req0D31ZN3vpdI1G5OSdReTQmqKfO8mn sean@figsocap.com"
+   ```
+
+3. **Enabled PubkeyAuthentication** in `C:\ProgramData\ssh\sshd_config`:
+   - Uncommented `PubkeyAuthentication yes`
+   - Commented out the `Match Group administrators` block (was overriding authorized_keys path)
+
+4. **Restarted sshd:**
+   ```powershell
+   Restart-Service sshd
+   ```
+
+### Mac Studio Key
+- Key: `~/.ssh/id_ed25519`
+- Generated: 2026-03-10
+- Comment: `sean@figsocap.com`
+
+### Network
+- ZBook (Defiant): `192.168.86.33`
+- Mac Studio (Mothership): `192.168.86.30`
+- Ollama port: `11434`
