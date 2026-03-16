@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Reports - DD Scheduler Bot{% endblock %}
+{% block title %}Reports - DynaBot{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -72,6 +72,7 @@
     </div>
     <div class="card-body">
         {% if reports %}
+        <div class="table-responsive">
         <table class="table table-hover" id="reportsTable">
             <thead>
                 <tr>
@@ -115,6 +116,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <div class="text-center py-5">
             <i class="bi bi-inbox" style="font-size: 4rem; color: #dee2e6;"></i>
