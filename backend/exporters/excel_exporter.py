@@ -134,6 +134,49 @@ def _get_blast_row_colors(description: str, is_hot: bool):
     return (PatternFill(start_color=fill_color, end_color=fill_color, fill_type='solid'), None)
 
 
+def _interleave_desma5_spacing(orders: List, min_gap: int = 2) -> List:
+    """
+    Reorder blast sequence so at least min_gap non-Desma-5 orders appear
+    between consecutive Desma-5 orders. Preserves relative order within
+    each group (Desma-5 and non-Desma-5).
+
+    When there aren't enough non-Desma-5 orders to maintain the gap,
+    remaining Desma-5 orders are placed at the end.
+    """
+    desma5 = [o for o in orders if str(getattr(o, 'planned_desma', '') or '').strip() == '5']
+    others  = [o for o in orders if str(getattr(o, 'planned_desma', '') or '').strip() != '5']
+
+    if not desma5:
+        return list(orders)
+
+    result = []
+    d5_i, ot_i = 0, 0
+    gap_remaining = 0  # non-Desma-5 orders still needed before next Desma-5
+
+    while d5_i < len(desma5) or ot_i < len(others):
+        if gap_remaining == 0 and d5_i < len(desma5) and ot_i >= len(others):
+            # Only Desma-5 left — place them all
+            result.extend(desma5[d5_i:])
+            break
+        elif gap_remaining == 0 and d5_i < len(desma5):
+            # Gap satisfied — place next Desma-5
+            result.append(desma5[d5_i])
+            d5_i += 1
+            gap_remaining = min_gap
+        elif ot_i < len(others):
+            # Fill gap with non-Desma-5
+            result.append(others[ot_i])
+            ot_i += 1
+            if gap_remaining > 0:
+                gap_remaining -= 1
+        else:
+            # Only Desma-5 left but gap not met — place remaining anyway
+            result.extend(desma5[d5_i:])
+            break
+
+    return result
+
+
 def export_blast_schedule(scheduled_orders: List, output_path: str,
                           reorder_sequence: List = None,
                           currently_blasting: List = None,
@@ -146,6 +189,9 @@ def export_blast_schedule(scheduled_orders: List, output_path: str,
     are prepended at the top with status 'IN PROGRESS'.
     """
     orders_with_blast = [o for o in scheduled_orders if o.blast_date]
+
+    # blast_times tracks the reassigned timestamps for use after reordering
+    blast_times = None
 
     if reorder_sequence:
         # Apply custom reorder: build index by WO#, then sort by sequence position
@@ -160,8 +206,13 @@ def export_blast_schedule(scheduled_orders: List, output_path: str,
                 reordered.append(o)
         orders_with_blast = reordered
     else:
-        # Default: sort by BLAST date
+        # Default: sort by BLAST date, then interleave Desma-5 orders
         orders_with_blast.sort(key=lambda x: x.blast_date)
+        # Capture takt cadence BEFORE reordering
+        blast_times = [o.blast_date for o in orders_with_blast]
+        # Interleave so ≥2 non-Desma-5 orders appear between consecutive Desma-5 orders
+        orders_with_blast = _interleave_desma5_spacing(orders_with_blast)
+        # blast_times[i] is now assigned to orders_with_blast[i] (sequence position, not order identity)
 
     data = []
     row_colors = []  # parallel list of (description, is_hot) for color coding
@@ -192,14 +243,16 @@ def export_blast_schedule(scheduled_orders: List, output_path: str,
     for seq, order in enumerate(orders_with_blast, 1):
         desc = str(order.description)[:50] if order.description else ''
         is_hot = getattr(order, 'priority', '') in ('Hot-ASAP', 'Hot-Dated')
+        # Use reassigned takt time if available (interleaved sequence), else order's own blast_date
+        assigned_blast_date = blast_times[seq - 1] if blast_times else order.blast_date
         row = {
             'Seq': seq,
             'WO#': order.wo_number,
             'Part Number': order.part_number,
             'Description': desc,
             'Customer': order.customer[:30] if order.customer else '',
-            'Blast Date': order.blast_date.strftime('%m/%d/%Y') if order.blast_date else '',
-            'Blast Time': order.blast_date.strftime('%H:%M') if order.blast_date else '',
+            'Blast Date': assigned_blast_date.strftime('%m/%d/%Y') if assigned_blast_date else '',
+            'Blast Time': assigned_blast_date.strftime('%H:%M') if assigned_blast_date else '',
             'Core Required': order.assigned_core,
             'Supermarket Location': getattr(order, 'supermarket_location', '') or '',
             'Special Instructions': getattr(order, 'special_instructions', '') or '',
