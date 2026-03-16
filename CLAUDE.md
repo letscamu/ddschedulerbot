@@ -45,6 +45,16 @@ If the branch is behind remote or has merge conflicts, do NOT begin work until t
 
 ---
 
+## Infrastructure
+
+- **MacBook Air** — Sean's primary dev machine
+- **Mothership (Mac Studio)** — always-on machine at `192.168.86.30`, SSH via `ssh mothership` from MacBook Air
+  - Repo present at `/Users/seanfilipow/CAMU/ddschedulerbot`
+  - Hosts scheduled automation (feedback pipeline launchd job)
+  - Homebrew, gh, gcloud all installed and authenticated
+
+---
+
 ## Project Overview
 
 **DynaBot** is a discrete event simulation (DES) based production scheduling web application for stator manufacturing. It is deployed on Google Cloud Run with persistent storage via Google Cloud Storage.
@@ -233,7 +243,7 @@ This ensures real user-reported bugs inform the debugging session before diving 
 
 ## Versioning Protocol (MANDATORY for production releases)
 
-**Current Version:** MVP 2.0.2
+**Current Version:** MVP 2.0.3
 
 ### Version Numbering: `X.Y.Z`
 

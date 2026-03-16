@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-bug-fill"></i> Flies and Swatters</h2>
-    <span class="badge bg-info fs-6">Current Version: MVP 2.0.2</span>
+    <span class="badge bg-info fs-6">Current Version: MVP 2.0.3</span>
 </div>
 
 <!-- Feedback Form -->
@@ -111,6 +111,32 @@
         <i class="bi bi-clock-history"></i> Version History
     </div>
     <div class="card-body">
+        <!-- MVP 2.0.3 -->
+        <div class="mb-4">
+            <h5>
+                <span class="badge bg-info">MVP 2.0.3</span>
+                <small class="text-muted ms-2">March 2026 - BLAST Schedule Intelligence</small>
+            </h5>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <i class="bi bi-palette-fill text-success"></i>
+                    <strong>BLAST schedule color coding:</strong> Description cell in the BLAST export is now color-coded by rubber type (XE=green, XR=pink, XD=light blue, NTX/DTX=purple). Hot list orders override with red background and bold yellow text.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-arrow-left-right text-primary"></i>
+                    <strong>Desma 5 interleaving:</strong> XR orders (all routed to Desma 5) are now automatically spread in the blast sequence with at least 2 non-Desma-5 orders between them. Blast times are reassigned by takt position after sequencing.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-bug-fill text-danger"></i>
+                    <strong>RTC / Op 1241 exclusion:</strong> Orders with "RTC" in their op description, or at Op 1241 (Return to Customer), are now excluded from scheduling.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-clock text-warning"></i>
+                    <strong>Op 940 queue time:</strong> Added 36-hour MoriSeiki 603 lathe queue time to Op 940 (Counterbore) pre-blast delay, reflecting the real-world bottleneck at that station.
+                </li>
+            </ul>
+        </div>
+
         <!-- MVP 2.0.2 -->
         <div class="mb-4">
             <h5>

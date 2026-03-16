@@ -90,7 +90,8 @@ class DataLoader:
                 order.get('description'),
                 order.get('supply_source'),
                 order.get('work_order_status'),
-                order.get('oso_op_description')
+                order.get('oso_op_description'),
+                order.get('oso_op_number')
             )
 
             if exclusion_reason:
@@ -317,7 +318,7 @@ class DataLoader:
             # Represents remaining pipeline time until the part is blast-ready.
             PRE_BLAST_DELAY_BY_OP = {
                 '900':  2.25,  # RECEIVE TUBE: 0.25 + 1.0 + 0.25 + 0.5 + 0.25
-                '940':  2.0,   # COUNTERBORE: 1.0 + 0.25 + 0.5 + 0.25
+                '940':  38.0,  # COUNTERBORE: 1.0 + 0.25 + 0.5 + 0.25 + 36.0 queue at MoriSeiki 603 lathe
                 '1220': 1.0,   # INDUCTION COIL: 0.25 + 0.5 + 0.25
                 '1240': 0.75,  # STAMPING & INSPECTION: 0.5 + 0.25
                 '1260': 0.25,  # TRANSFER TO SUPERMARKET
