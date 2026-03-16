@@ -3,7 +3,12 @@
     "playwright": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium"]
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser", "chromium",
+        "--executable-path", "/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome"
+      ]
     }
   }
 }
