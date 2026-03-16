@@ -134,7 +134,7 @@
                             <td><i class="bi bi-file-earmark-excel text-warning"></i> Hot List</td>
                             <td class="text-end">
                                 {% if files.hot_list %}
-                                    <span class="text-success" data-bs-toggle="tooltip" data-bs-placement="left" title="Hot List loaded — optional file used for priority overrides"><i class="bi bi-check-circle"></i> {{ files.hot_list.name[:30] }}...</span>
+                                    <span class="text-warning" data-bs-toggle="tooltip" data-bs-placement="left" title="Hot List loaded — contains priority overrides (ASAP/Dated orders)"><i class="bi bi-exclamation-circle"></i> {{ files.hot_list.name[:30] }}...</span>
                                 {% else %}
                                     <span class="text-muted"><i class="bi bi-dash-circle"></i> Optional</span>
                                 {% endif %}
