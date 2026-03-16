@@ -243,7 +243,7 @@ This ensures real user-reported bugs inform the debugging session before diving 
 
 ## Versioning Protocol (MANDATORY for production releases)
 
-**Current Version:** MVP 2.0.3
+**Current Version:** MVP 2.0.4
 
 ### Version Numbering: `X.Y.Z`
 
