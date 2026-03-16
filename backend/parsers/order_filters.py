@@ -55,7 +55,8 @@ def classify_product_type(part_number: Optional[str], description: Optional[str]
 def should_exclude_order(part_number: Optional[str], description: Optional[str],
                          supply_source: Optional[str] = None,
                          work_order_status: Optional[str] = None,
-                         current_operation: Optional[str] = None) -> Optional[str]:
+                         current_operation: Optional[str] = None,
+                         current_op_number: Optional[str] = None) -> Optional[str]:
     """
     Determine if an order should be excluded from scheduling.
 
@@ -91,6 +92,15 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     # Exclude OSP Canada operations — done outside the process
     if 'OSP CANADA' in current_op_upper:
         return 'OSP Canada'
+
+    # Exclude RTC (Return to Customer) operations — order is being returned, not processed
+    if 'RTC' in current_op_upper.split() or current_op_upper == 'RTC':
+        return 'RTC (Return to Customer)'
+
+    # Exclude Op 1241 (RTC routing) — return-to-customer operation, not schedulable
+    op_num_str = str(current_op_number).strip() if current_op_number else ''
+    if op_num_str == '1241':
+        return 'Op 1241 (RTC)'
 
     # Exclude REPAIR parts
     if 'REPAIR' in part_upper or 'REPAIR' in desc_upper:
