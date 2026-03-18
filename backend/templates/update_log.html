@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-bug-fill"></i> Flies and Swatters</h2>
-    <span class="badge bg-info fs-6">Current Version: MVP 2.0.4</span>
+    <span class="badge bg-info fs-6">Current Version: MVP 2.0.5</span>
 </div>
 
 <!-- Feedback Form -->
@@ -111,6 +111,36 @@
         <i class="bi bi-clock-history"></i> Version History
     </div>
     <div class="card-body">
+        <!-- MVP 2.0.5 -->
+        <div class="mb-4">
+            <h5>
+                <span class="badge bg-info">MVP 2.0.5</span>
+                <small class="text-muted ms-2">March 2026 - Scheduler Resilience & Combined Upload</small>
+            </h5>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <i class="bi bi-bug-fill text-danger"></i>
+                    <strong>Scheduler crash fix (GH #44):</strong> Fixed "'Description' is not in list" error when generating schedules. Root cause: SDR files with non-standard sheet names crashed the parser, which cascaded through the data pipeline and prevented core mapping from loading &mdash; causing all orders to go to pending.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-shield-check text-success"></i>
+                    <strong>SDR parser resilience:</strong> Shop Dispatch parser now falls back to the first sheet when "Sheet1" is not found, and SDR load failures no longer kill the entire data pipeline.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-files text-primary"></i>
+                    <strong>Combined report upload (GH #43):</strong> Upload a single COMB*.xlsx file containing both OSO and SDR tabs &mdash; DynaBot auto-detects and splits them into separate files for processing.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-file-earmark-excel text-info"></i>
+                    <strong>Flexible OSO sheet names:</strong> OSO uploads now accept "OSO", "RawData", "Open Sales Order", or "Sales Order" as the data sheet name.
+                </li>
+                <li class="list-group-item">
+                    <i class="bi bi-bar-chart text-warning"></i>
+                    <strong>Diagnostic logging:</strong> Schedule runs now log parsed/scheduled/blast/unscheduled order counts for faster debugging.
+                </li>
+            </ul>
+        </div>
+
         <!-- MVP 2.0.4 -->
         <div class="mb-4">
             <h5>
