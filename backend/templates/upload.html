@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Upload Files - DD Scheduler Bot{% endblock %}
+{% block title %}Upload Files - DynaBot{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -42,6 +42,7 @@
                 <i class="bi bi-info-circle"></i> Supported File Types
             </div>
             <div class="card-body">
+              <div class="table-responsive">
                 <table class="table table-sm">
                     <thead>
                         <tr>
@@ -63,6 +64,12 @@
                             <td><code>Shop Dispatch*.xlsx</code> or <code>SDR*.xlsx</code></td>
                             <td><span class="badge bg-secondary">Optional</span></td>
                             <td>Work center operations and routing data</td>
+                        </tr>
+                        <tr>
+                            <td><i class="bi bi-file-earmark-excel text-primary"></i> Combined Report</td>
+                            <td><code>COMB*.xlsx</code></td>
+                            <td><span class="badge bg-secondary">Optional</span></td>
+                            <td>Single file with OSO + SDR tabs &mdash; auto-splits on upload</td>
                         </tr>
                         <!-- Pegging Report removed in MVP 1.1 -->
                         <tr>
@@ -87,6 +94,7 @@
                         {% endif %}
                     </tbody>
                 </table>
+              </div>
             </div>
         </div>
     </div>
@@ -294,6 +302,8 @@
     // Detect file type from filename
     function detectFileType(filename) {
         const lower = filename.toLowerCase().replace(/_/g, ' ');
+        if (lower.includes('comb') && lower.includes('report')) return 'combined_report';
+        if (lower.startsWith('comb')) return 'combined_report';
         if (lower.includes('open sales order') || lower.startsWith('oso')) return 'sales_order';
         if (lower.includes('shop dispatch') || lower.startsWith('sdr')) return 'shop_dispatch';
         // Pegging Report removed in MVP 1.1

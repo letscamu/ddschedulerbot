@@ -22,6 +22,7 @@ __pycache__/
 .env.*
 env.yaml
 .venv
+.venv-*/
 venv/
 ENV/
 
@@ -37,3 +38,4 @@ feedback/
 
 # Debug fixture files (contain real client data — not for repo)
 debugging-test-uploads/
+.playwright-mcp/

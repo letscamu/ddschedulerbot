@@ -25,8 +25,15 @@ def parse_shop_dispatch(filepath: str, sheet_name: str = 'Sheet1') -> tuple[List
         Tuple of (list of order dictionaries, list of excluded orders with reasons)
     """
     try:
-        # Read the Excel file
-        df = pd.read_excel(filepath, sheet_name=sheet_name)
+        # Read the Excel file — try specified sheet, fall back to first sheet
+        try:
+            df = pd.read_excel(filepath, sheet_name=sheet_name)
+        except ValueError:
+            # Sheet name not found — try reading the first sheet
+            xl = pd.ExcelFile(filepath)
+            actual_sheet = xl.sheet_names[0]
+            print(f"  [WARN] Sheet '{sheet_name}' not found, using first sheet: '{actual_sheet}'")
+            df = pd.read_excel(filepath, sheet_name=actual_sheet)
 
         print(f"Loaded {len(df)} rows from Shop Dispatch {sheet_name} sheet")
         print(f"Columns found: {list(df.columns)}")

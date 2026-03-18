@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Schedule - EstradaBot{% endblock %}
+{% block title %}Schedule - DynaBot{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -121,6 +121,7 @@
         </div>
 
         <div id="scheduleTableContainer" style="display: none;">
+          <div class="table-responsive">
             <table id="scheduleTable" class="table table-striped table-hover" style="width:100%">
                 <thead>
                     <tr>
@@ -143,6 +144,10 @@
                         <th>Status</th>
                     </tr>
                     <tr id="filterRow">
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
                         <th></th>
                         <th></th>
                         <th></th>
@@ -182,6 +187,7 @@
                     </tr>
                 </tfoot>
             </table>
+          </div>
         </div>
     </div>
 </div>

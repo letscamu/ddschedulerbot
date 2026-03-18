@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard - DD Scheduler Bot{% endblock %}
+{% block title %}Dashboard - DynaBot{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -134,7 +134,7 @@
                             <td><i class="bi bi-file-earmark-excel text-warning"></i> Hot List</td>
                             <td class="text-end">
                                 {% if files.hot_list %}
-                                    <span class="text-warning"><i class="bi bi-exclamation-circle"></i> {{ files.hot_list.name[:30] }}...</span>
+                                    <span class="text-warning" data-bs-toggle="tooltip" data-bs-placement="left" title="Hot List loaded — contains priority overrides (ASAP/Dated orders)"><i class="bi bi-exclamation-circle"></i> {{ files.hot_list.name[:30] }}...</span>
                                 {% else %}
                                     <span class="text-muted"><i class="bi bi-dash-circle"></i> Optional</span>
                                 {% endif %}
@@ -200,7 +200,7 @@
 </div>
 
 <!-- Schedule Preview -->
-{% if schedule.orders %}
+{% if schedule.orders or schedule.serialized_orders %}
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-table"></i> Schedule Preview (Top 10)</span>
@@ -226,28 +226,33 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for order in schedule.orders[:10] %}
+                    {% for order in (schedule.orders or schedule.serialized_orders)[:10] %}
                     <tr>
-                        <td><strong>{{ order.wo_number }}</strong></td>
-                        <td>{{ order.part_number }}</td>
-                        <td>{{ order.customer[:20] }}{% if order.customer|length > 20 %}...{% endif %}</td>
+                        <td><strong>{{ order.wo_number if order.wo_number is defined else order.get('wo_number', '') }}</strong></td>
+                        <td>{{ order.part_number if order.part_number is defined else order.get('part_number', '') }}</td>
+                        {% set cust = order.customer if order.customer is defined else order.get('customer', '') %}
+                        <td>{{ cust[:20] }}{% if cust|length > 20 %}...{% endif %}</td>
+                        {% set prio = order.priority if order.priority is defined else order.get('priority', '') %}
                         <td>
-                            {% if order.priority == 'Hot-ASAP' %}
+                            {% if prio == 'Hot-ASAP' %}
                                 <span class="badge priority-hot-asap">ASAP</span>
-                            {% elif order.priority == 'Hot-Dated' %}
+                            {% elif prio == 'Hot-Dated' %}
                                 <span class="badge priority-hot-dated">DATED</span>
-                            {% elif order.priority == 'Rework' %}
+                            {% elif prio == 'Rework' %}
                                 <span class="badge priority-rework">REWORK</span>
                             {% else %}
                                 <span class="badge priority-normal">NORMAL</span>
                             {% endif %}
                         </td>
-                        <td>{{ order.blast_date.strftime('%m/%d %H:%M') if order.blast_date else '-' }}</td>
-                        <td>{{ order.completion_date.strftime('%m/%d %H:%M') if order.completion_date else '-' }}</td>
+                        {% set blast = order.blast_date if order.blast_date is defined else order.get('blast_date', '') %}
+                        <td>{{ blast.strftime('%m/%d %H:%M') if blast and blast.strftime is defined else (blast[:11] if blast else '-') }}</td>
+                        {% set comp = order.completion_date if order.completion_date is defined else order.get('completion_date', '') %}
+                        <td>{{ comp.strftime('%m/%d %H:%M') if comp and comp.strftime is defined else (comp[:11] if comp else '-') }}</td>
+                        {% set status = order.on_time_status if order.on_time_status is defined else order.get('on_time_status', '') %}
                         <td>
-                            {% if order.on_time_status == 'On Time' %}
+                            {% if status == 'On Time' %}
                                 <span class="badge bg-success">On Time</span>
-                            {% elif order.on_time_status == 'Late' %}
+                            {% elif status == 'Late' %}
                                 <span class="badge bg-danger">Late</span>
                             {% else %}
                                 <span class="badge bg-warning text-dark">At Risk</span>
