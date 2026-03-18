@@ -283,14 +283,17 @@ def export_blast_schedule(scheduled_orders: List, output_path: str,
         worksheet.freeze_panes = 'A2'
 
         # Apply rubber type / hot list color coding to Description column
-        desc_col_idx = list(df.columns).index('Description') + 1  # 1-based
-        for row_idx, (desc, is_hot) in enumerate(row_colors, start=2):  # row 1 is header
-            fill, font = _get_blast_row_colors(desc, is_hot)
-            cell = worksheet.cell(row=row_idx, column=desc_col_idx)
-            if fill:
-                cell.fill = fill
-            if font:
-                cell.font = font
+        if 'Description' not in df.columns:
+            print("[BLAST Export] Warning: No orders with blast dates — skipping color coding")
+        else:
+            desc_col_idx = list(df.columns).index('Description') + 1  # 1-based
+            for row_idx, (desc, is_hot) in enumerate(row_colors, start=2):  # row 1 is header
+                fill, font = _get_blast_row_colors(desc, is_hot)
+                cell = worksheet.cell(row=row_idx, column=desc_col_idx)
+                if fill:
+                    cell.fill = fill
+                if font:
+                    cell.font = font
 
         # Unscheduled Orders tab
         if unscheduled_orders is not None:

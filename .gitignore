@@ -22,6 +22,7 @@ __pycache__/
 .env.*
 env.yaml
 .venv
+.venv-*/
 venv/
 ENV/
 

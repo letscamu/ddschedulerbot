@@ -65,6 +65,12 @@
                             <td><span class="badge bg-secondary">Optional</span></td>
                             <td>Work center operations and routing data</td>
                         </tr>
+                        <tr>
+                            <td><i class="bi bi-file-earmark-excel text-primary"></i> Combined Report</td>
+                            <td><code>COMB*.xlsx</code></td>
+                            <td><span class="badge bg-secondary">Optional</span></td>
+                            <td>Single file with OSO + SDR tabs &mdash; auto-splits on upload</td>
+                        </tr>
                         <!-- Pegging Report removed in MVP 1.1 -->
                         <tr>
                             <td><i class="bi bi-file-earmark-excel text-warning"></i> Hot List</td>
@@ -296,6 +302,8 @@
     // Detect file type from filename
     function detectFileType(filename) {
         const lower = filename.toLowerCase().replace(/_/g, ' ');
+        if (lower.includes('comb') && lower.includes('report')) return 'combined_report';
+        if (lower.startsWith('comb')) return 'combined_report';
         if (lower.includes('open sales order') || lower.startsWith('oso')) return 'sales_order';
         if (lower.includes('shop dispatch') || lower.startsWith('sdr')) return 'shop_dispatch';
         // Pegging Report removed in MVP 1.1

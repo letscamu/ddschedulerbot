@@ -127,11 +127,15 @@ class DataLoader:
             return False
 
         print(f"  Loading: {dispatch_file.name}")
-        self.shop_dispatch_orders, self.wip_in_process_orders, self.on_blaster_orders, dispatch_excluded = parse_shop_dispatch(str(dispatch_file))
-        self.excluded_orders.extend(dispatch_excluded)
-
-        print(f"  [OK] Loaded {len(self.shop_dispatch_orders)} orders from Shop Dispatch")
-        return True
+        try:
+            self.shop_dispatch_orders, self.wip_in_process_orders, self.on_blaster_orders, dispatch_excluded = parse_shop_dispatch(str(dispatch_file))
+            self.excluded_orders.extend(dispatch_excluded)
+            print(f"  [OK] Loaded {len(self.shop_dispatch_orders)} orders from Shop Dispatch")
+            return True
+        except Exception as e:
+            print(f"  [WARN] Failed to load Shop Dispatch: {e}")
+            print(f"  Continuing without Shop Dispatch data (optional file)")
+            return False
 
     # Pegging Report loading removed in MVP 1.1 — turnaround now uses creation_date for all orders
 

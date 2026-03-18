@@ -802,6 +802,115 @@ def _reconcile_special_requests(filename: str, file_type: str) -> int:
 
 # ============== API Routes ==============
 
+# Known OSO sheet names in combo files (mapped to canonical "RawData")
+_OSO_SHEET_NAMES = {'RawData', 'OSO', 'Open Sales Order', 'Sales Order'}
+# Known SDR sheet names in combo files
+_SDR_SHEET_NAMES = {'Sheet1', 'Dispatch Report', 'Shop Dispatch', 'SDR'}
+
+
+def _handle_combined_upload(file, filename):
+    """Split a combined OSO+SDR Excel file into separate uploads."""
+    import tempfile
+    import openpyxl
+
+    fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
+    os.close(fd)
+    file.save(temp_path)
+
+    wb = openpyxl.load_workbook(temp_path)
+    sheet_names = set(wb.sheetnames)
+
+    # Find the OSO and SDR sheets
+    oso_sheet = next((s for s in wb.sheetnames if s in _OSO_SHEET_NAMES), None)
+    sdr_sheet = next((s for s in wb.sheetnames if s in _SDR_SHEET_NAMES), None)
+
+    if not oso_sheet and not sdr_sheet:
+        wb.close()
+        os.unlink(temp_path)
+        return jsonify({
+            'error': f'Combined file not recognized. Expected sheets like "OSO"/"RawData" '
+                     f'and "Dispatch Report"/"Sheet1", but found: {", ".join(wb.sheetnames)}'
+        }), 400
+
+    uploaded = []
+    sensitive_headers = ['unit price', 'net price', 'customer address', 'address']
+
+    # Extract and upload OSO sheet
+    if oso_sheet:
+        oso_wb = openpyxl.load_workbook(temp_path)
+        # Remove all sheets except the OSO one
+        for s in oso_wb.sheetnames:
+            if s != oso_sheet:
+                del oso_wb[s]
+        # Rename to RawData for consistency with the parser
+        oso_wb[oso_sheet].title = 'RawData'
+
+        # Scrub sensitive columns
+        ws = oso_wb['RawData']
+        cols_to_delete = []
+        scrubbed = []
+        for col_idx in range(1, ws.max_column + 1):
+            header = ws.cell(row=1, column=col_idx).value
+            if header and str(header).strip().lower() in sensitive_headers:
+                cols_to_delete.append(col_idx)
+                scrubbed.append(str(header).strip())
+        for col_idx in sorted(cols_to_delete, reverse=True):
+            ws.delete_cols(col_idx)
+        if scrubbed:
+            print(f"[Combo] Scrubbed sensitive columns from OSO sheet: {scrubbed}")
+
+        # Save and upload as OSO file
+        base = filename.rsplit('.', 1)[0]
+        oso_filename = f"OSO_{base}.xlsx"
+        fd2, oso_path = tempfile.mkstemp(suffix='.xlsx')
+        os.close(fd2)
+        oso_wb.save(oso_path)
+        oso_wb.close()
+        gcs_storage.upload_file(oso_path, oso_filename)
+        os.unlink(oso_path)
+        uploaded.append(f'OSO: "{oso_filename}"')
+        print(f"[Combo] Extracted and uploaded OSO sheet as {oso_filename}")
+
+    # Extract and upload SDR sheet
+    if sdr_sheet:
+        sdr_wb = openpyxl.load_workbook(temp_path)
+        for s in sdr_wb.sheetnames:
+            if s != sdr_sheet:
+                del sdr_wb[s]
+
+        base = filename.rsplit('.', 1)[0]
+        sdr_filename = f"SDR_{base}.xlsx"
+        fd3, sdr_path = tempfile.mkstemp(suffix='.xlsx')
+        os.close(fd3)
+        sdr_wb.save(sdr_path)
+        sdr_wb.close()
+        gcs_storage.upload_file(sdr_path, sdr_filename)
+        os.unlink(sdr_path)
+        uploaded.append(f'SDR: "{sdr_filename}"')
+        print(f"[Combo] Extracted and uploaded SDR sheet as {sdr_filename}")
+
+    wb.close()
+    os.unlink(temp_path)
+
+    # Reconcile special requests against the new OSO data
+    matched_count = 0
+    if oso_sheet:
+        matched_count = _reconcile_special_requests(oso_filename, 'sales_order')
+
+    flash_msg = f'Combined file split and uploaded: {", ".join(uploaded)}'
+    if matched_count > 0:
+        flash_msg += f' {matched_count} pending special request(s) matched.'
+    flash(flash_msg, 'success')
+
+    return jsonify({
+        'success': True,
+        'filename': filename,
+        'type': 'combined_report',
+        'split_into': uploaded,
+        'matched_requests': matched_count,
+    })
+
+
 @app.route('/api/upload', methods=['POST'])
 @login_required
 def upload_file():
@@ -821,6 +930,12 @@ def upload_file():
     # Upload to GCS
     filename = secure_filename(file.filename)
     try:
+        # Detect combined OSO+SDR report and split into separate files
+        is_combo = (file_type == 'combined_report'
+                    or 'comb' in filename.lower().replace('_', ' '))
+        if is_combo:
+            return _handle_combined_upload(file, filename)
+
         # Scrub sensitive columns from sales order files before uploading
         if file_type == 'sales_order' or 'open sales order' in filename.lower().replace('_', ' ') or filename.lower().startswith('oso'):
             import tempfile
@@ -836,12 +951,16 @@ def upload_file():
             scrubbed_columns = []
             sensitive_headers = ['unit price', 'net price', 'customer address', 'address']
 
-            # Drop all sheets except RawData (SAP exports include many extra tabs)
-            target_sheet = 'RawData'
-            if target_sheet not in wb.sheetnames:
+            # Drop all sheets except RawData/OSO (SAP exports include many extra tabs)
+            target_sheet = next((s for s in wb.sheetnames if s in _OSO_SHEET_NAMES), None)
+            if not target_sheet:
                 wb.close()
                 os.unlink(temp_path)
-                return jsonify({'error': f'Invalid file: expected a "RawData" sheet but found: {", ".join(wb.sheetnames)}'}), 400
+                return jsonify({'error': f'Invalid file: expected a "RawData" or "OSO" sheet but found: {", ".join(wb.sheetnames)}'}), 400
+            # Rename to RawData for consistency with the parser
+            if target_sheet != 'RawData':
+                wb[target_sheet].title = 'RawData'
+                target_sheet = 'RawData'
             sheets_to_remove = [s for s in wb.sheetnames if s != target_sheet]
             for sheet_name in sheets_to_remove:
                 del wb[sheet_name]
@@ -948,6 +1067,9 @@ def _run_schedule_mode(loader, working_days, mode_label, temp_dir, timestamp,
     # Orders that were parsed but not scheduled (no core match, core fully occupied, etc.)
     scheduled_wo_set = {o.wo_number for o in scheduled_orders}
     unscheduled_orders = [o for o in loader.orders if o.get('wo_number') not in scheduled_wo_set]
+    orders_with_blast = [o for o in scheduled_orders if o.blast_date]
+    print(f"[Schedule] {mode_label}: {len(loader.orders)} parsed, {len(scheduled_orders)} scheduled, "
+          f"{len(orders_with_blast)} with blast dates, {len(unscheduled_orders)} unscheduled")
 
     master_filename = f'Master_Schedule_{mode_label}_{timestamp}.xlsx'
     master_path = os.path.join(temp_dir, master_filename)
