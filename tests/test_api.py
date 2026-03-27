@@ -88,6 +88,27 @@ class TestFeedbackEndpoints:
         data = response.get_json()
         assert data['success'] is True
 
+    def test_update_feedback_status_visible_in_mine(self, auth_client):
+        """Status change by admin should be visible in /api/feedback/mine."""
+        # Submit feedback
+        auth_client.post('/api/feedback', json={
+            'category': 'Bug Report',
+            'priority': 'Low',
+            'message': 'Fix visibility test'
+        })
+        # Update status to Fixed (index 0 = newest in reversed list)
+        response = auth_client.put('/api/feedback/0/status', json={
+            'status': 'Fixed'
+        })
+        assert response.get_json()['success'] is True
+
+        # Verify the status is reflected in the user's own feedback view
+        response = auth_client.get('/api/feedback/mine')
+        data = response.get_json()
+        matching = [f for f in data['feedback'] if f['message'] == 'Fix visibility test']
+        assert len(matching) == 1
+        assert matching[0]['status'] == 'Fixed'
+
     def test_update_feedback_invalid_status(self, auth_client):
         response = auth_client.put('/api/feedback/0/status', json={
             'status': 'InvalidStatus'
