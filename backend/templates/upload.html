@@ -280,19 +280,28 @@
             uploadProgress.classList.add('d-none');
 
             if (xhr.status === 200) {
-                const result = JSON.parse(xhr.responseText);
+                try {
+                    JSON.parse(xhr.responseText);
+                } catch (_) { /* response OK even if not JSON */ }
                 showUploadResult(file.name, true, 'Uploaded successfully');
                 // Refresh the page to update file list
                 setTimeout(() => window.location.reload(), 1500);
             } else {
-                const result = JSON.parse(xhr.responseText);
-                showUploadResult(file.name, false, result.error || 'Upload failed');
+                let msg = 'Upload failed';
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    msg = result.error || msg;
+                } catch (_) {
+                    msg = `Server error (${xhr.status}). The file may be too large or contain unsupported formatting.`;
+                }
+                showUploadResult(file.name, false, msg);
             }
         });
 
         xhr.addEventListener('error', () => {
             uploadProgress.classList.add('d-none');
-            showUploadResult(file.name, false, 'Network error');
+            showUploadResult(file.name, false,
+                'Upload failed — the server did not respond. The file may be too large or took too long to process. Please try again.');
         });
 
         xhr.open('POST', '/api/upload');
