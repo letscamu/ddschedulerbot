@@ -137,8 +137,6 @@ class DataLoader:
             print(f"  Continuing without Shop Dispatch data (optional file)")
             return False
 
-    # Pegging Report loading removed in MVP 1.1 — turnaround now uses creation_date for all orders
-
     def load_hot_list(self, filepath: Optional[str] = None) -> bool:
         """
         Load Hot List data for priority scheduling.
@@ -292,9 +290,6 @@ class DataLoader:
 
             print(f"\n[OK] Total orders after merge: {len(self.orders)}")
 
-            # 3b. Pegging Report — REMOVED in MVP 1.1
-            # Turnaround now uses creation_date for all orders (relines and new stators)
-
             # Remove post-blast WIP orders (op > 1300) from the blast queue.
             # These are in the injection/cure/quench pipeline — cores are occupied.
             if self.wip_in_process_orders:
@@ -339,8 +334,8 @@ class DataLoader:
             if pre_blast_stamped > 0:
                 print(f"  Stamped pre-blast delays on {pre_blast_stamped} orders")
 
-            # 3c. Load Hot List for priority scheduling
-            print("\n[3b/5] Loading Hot List...")
+            # 3b. Load Hot List for priority scheduling
+            print("\n[3b/6] Loading Hot List...")
             self.load_hot_list()
 
             # 3c. Load DCP Report for supermarket locations (optional)

@@ -1,0 +1,74 @@
+name: Agent Task
+description: Structured task for the Cowork-to-Code automation pipeline
+title: "[Agent]: "
+labels: ["from-cowork"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is used by the CAMU automation pipeline. Issues created from this template can be labeled `agent-ready` to trigger autonomous Claude Code builds.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: 1-2 sentence description of what to build or fix.
+      placeholder: Describe the task concisely...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this matters — link to planning conversation, decision, or feedback entry.
+      placeholder: Background and motivation...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source
+      description: Where did this task originate?
+      options:
+        - cowork-planning
+        - feedback-pipeline
+        - agent-discovered
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec
+    attributes:
+      label: Spec (Acceptance Criteria)
+      description: What "done" looks like. Use checkboxes for each criterion.
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+    validations:
+      required: true
+
+  - type: textarea
+    id: files-affected
+    attributes:
+      label: Files Likely Affected
+      description: List file paths the agent should focus on.
+      placeholder: |
+        - `path/to/file.py`
+        - `path/to/other.js`
+
+  - type: textarea
+    id: blocked-by
+    attributes:
+      label: Blocked By
+      description: Other issues or decisions this depends on, if any.
+      placeholder: "None, or #issue-number"
+
+  - type: textarea
+    id: agent-notes
+    attributes:
+      label: Agent Notes
+      description: Anything Claude Code needs to know that isn't in CLAUDE.md.
+      placeholder: Special instructions, constraints, gotchas...
