@@ -970,7 +970,7 @@
                         <td class="${priorityClass}">${fb.priority}</td>
                         <td>${statusCell}</td>
                         <td>
-                            <select class="form-select form-select-sm dev-status-select" data-index="${index}" style="font-size: 0.7rem; padding: 2px 4px; width: auto;">
+                            <select class="form-select form-select-sm dev-status-select" data-index="${idx}" style="font-size: 0.7rem; padding: 2px 4px; width: auto;">
                                 ${devStatusOptions.map(o => `<option value="${o.value}" ${o.value === devStatus ? 'selected' : ''}>${o.label}</option>`).join('')}
                             </select>
                         </td>
@@ -1000,6 +1000,7 @@
         .then(data => {
             if (data.success) {
                 loadFeedback();
+                loadMyFeedback();
             } else {
                 alert('Error: ' + (data.error || 'Unknown error'));
             }
