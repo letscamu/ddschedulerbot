@@ -1,8 +1,8 @@
-# EstradaBot
+# DynaBot
 
 A Discrete Event Simulation (DES) based production scheduling web application for stator manufacturing, deployed on Google Cloud Run with persistent storage via Google Cloud Storage.
 
-**Live at:** https://www.estradabot.biz
+**Live at:** https://www.dynabot.biz
 
 ## Features
 
