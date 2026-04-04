@@ -271,6 +271,33 @@ When merging changes to `master` that will be deployed to production, you MUST:
 
 ---
 
+## Project Tracking — CAMU Master Tracker
+
+**All task status lives in the [CAMU Master Tracker](https://github.com/orgs/letscamu/projects/2) GitHub Project.** Markdown planning docs (roadmap.md, state.md, etc.) carry context and decisions — not status. GitHub Project is the source of truth for what's in progress, blocked, or done.
+
+### Session Startup — Check the Tracker
+After the git checks above, also run:
+```bash
+gh project item-list 2 --owner letscamu --format json | python3 -c "
+import json, sys
+items = json.load(sys.stdin)['items']
+dynabot = [i for i in items if i.get('subProject','') == 'DynaBot' or 'DynaBot' in i.get('title','') or 'DDScheduler' in i.get('title','')]
+for i in dynabot:
+    print(f\"  [{i.get('status','?'):12}] {i['title']}\")
+" 2>/dev/null || echo "  (Could not reach GitHub Project — work from local planning docs)"
+```
+
+### When You Discover New Work
+- **Bug found while coding?** Create an issue: `gh issue create --repo letscamu/ddschedulerbot --title "[Bug] ..." --body "..." --label bug,agent-discovered`
+- **Then add to project:** `gh project item-add 2 --owner letscamu --url <issue_url>`
+- **Do NOT fix it in the current PR** unless it directly blocks the task you're on. File it and move on.
+
+### When You Complete Work
+- Update the GitHub issue status via PR (linking `Closes #NN` in the PR body auto-closes the issue)
+- The project board status updates automatically when issues close
+
+---
+
 ## Team Coordination
 
 - Before starting work on a feature, check the GitHub project board and open PRs

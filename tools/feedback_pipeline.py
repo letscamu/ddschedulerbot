@@ -438,6 +438,116 @@ def create_issues_batch(args):
     print(f"\n[Pipeline] Created {created}/{len(eligible)} GitHub issues")
 
 
+def _add_to_github_project(issue_url: str, entry: dict):
+    """Add a newly created issue to the CAMU Master Tracker GitHub Project
+    and set its custom fields (Sub-Project, Priority)."""
+    project_number = '2'
+    org = 'letscamu'
+
+    # Add the issue to the project
+    try:
+        add_cmd = [
+            'gh', 'project', 'item-add', project_number,
+            '--owner', org,
+            '--url', issue_url,
+        ]
+        result = subprocess.run(add_cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print(f"  Added to CAMU Master Tracker (Project #{project_number})")
+        else:
+            print(f"  Warning: Could not add to project: {result.stderr.strip()}")
+            return  # Don't try to set fields if we couldn't add it
+
+        # Map feedback priority to project Priority field values
+        priority_map = {
+            'High': 'P1',
+            'Medium': 'P2',
+            'Low': 'P3',
+        }
+        project_priority = priority_map.get(entry.get('priority', 'Medium'), 'P2')
+
+        # Get the item ID from the project so we can set fields
+        # Use gh project item-list to find the item we just added
+        import time
+        time.sleep(1)  # Brief pause for GitHub to index the new item
+
+        list_cmd = [
+            'gh', 'project', 'item-list', project_number,
+            '--owner', org,
+            '--format', 'json',
+        ]
+        list_result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=30)
+        if list_result.returncode != 0:
+            print(f"  Warning: Could not list project items to set fields")
+            return
+
+        import json as _json
+        items = _json.loads(list_result.stdout).get('items', [])
+
+        # Find the item by matching the issue URL
+        issue_number = _parse_issue_number(issue_url)
+        item_id = None
+        for item in items:
+            if item.get('content', {}).get('number') == issue_number:
+                item_id = item.get('id')
+                break
+
+        if not item_id:
+            # Fallback: the most recently added item is likely ours
+            if items:
+                item_id = items[-1].get('id')
+
+        if not item_id:
+            print(f"  Warning: Could not find item in project to set fields")
+            return
+
+        # Get the project node ID for item-edit
+        view_cmd = [
+            'gh', 'project', 'view', project_number,
+            '--owner', org,
+            '--format', 'json',
+        ]
+        view_result = subprocess.run(view_cmd, capture_output=True, text=True, timeout=30)
+        if view_result.returncode != 0:
+            print(f"  Warning: Could not get project ID for field edits")
+            return
+
+        project_id = _json.loads(view_result.stdout).get('id', '')
+
+        # Set Sub-Project field
+        try:
+            subprocess.run([
+                'gh', 'project', 'item-edit',
+                '--project-id', project_id,
+                '--id', item_id,
+                '--field-id', 'Sub-Project',
+                '--single-select-option-id', 'DynaBot',
+            ], capture_output=True, text=True, timeout=15)
+        except Exception:
+            pass
+
+        # Set Priority field
+        try:
+            subprocess.run([
+                'gh', 'project', 'item-edit',
+                '--project-id', project_id,
+                '--id', item_id,
+                '--field-id', 'Priority',
+                '--single-select-option-id', project_priority,
+            ], capture_output=True, text=True, timeout=15)
+        except Exception:
+            pass
+
+        print(f"  Set fields: Sub-Project=DynaBot, Priority={project_priority}")
+
+    except FileNotFoundError:
+        print("  Warning: 'gh' CLI not available — issue created but not added to project")
+    except subprocess.TimeoutExpired:
+        print("  Warning: Timed out adding to project — issue was created successfully")
+    except Exception as e:
+        print(f"  Warning: Could not add to project: {e}")
+
+
 def _create_gh_issue(entry: dict, index: int) -> str:
     """Create a GitHub issue using the gh CLI. Returns issue URL or empty string."""
     category = entry.get('category', 'Other')
@@ -524,6 +634,8 @@ def _create_gh_issue(entry: dict, index: int) -> str:
         if result.returncode == 0:
             url = result.stdout.strip()
             print(f"  Created: {url}")
+            # Add to CAMU Master Tracker project
+            _add_to_github_project(url, entry)
             return url
         else:
             stderr = result.stderr.strip()
@@ -539,6 +651,8 @@ def _create_gh_issue(entry: dict, index: int) -> str:
                 if result2.returncode == 0:
                     url = result2.stdout.strip()
                     print(f"  Created (no labels): {url}")
+                    # Add to CAMU Master Tracker project
+                    _add_to_github_project(url, entry)
                     return url
 
             print(f"  Error creating issue: {stderr}")
