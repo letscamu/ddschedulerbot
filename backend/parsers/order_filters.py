@@ -114,8 +114,15 @@ def should_exclude_order(part_number: Optional[str], description: Optional[str],
     if desc_upper.startswith('STATOR, CUSTOMER'):
         return 'Stator Customer'
 
-    # Exclude rotors: R/C prefix (e.g., R/C1234, RC1234) or standalone C/R + digit (e.g., C675678, R800783)
+    # Exclude rotors. Two cases:
+    #  1. Part number with R/C prefix (e.g., R/C1234, RC1234, C675678, R800783)
+    #  2. Numeric (new-part-number) rotors whose ROTOR nature only shows in the
+    #     description: a leading "R<digit>" designation (R8257810.0-...) or the
+    #     "-SLD" solid-rotor marker (e.g. ...HR-SLD-2.125, ...FWC-SLD-API NC40).
+    #     Stators/relines descriptions lead with "S<digit>" and never carry -SLD.
     if re.match(r'^[RC]\d', part_upper) or re.match(r'^R/?C\d', part_upper):
+        return 'Rotor'
+    if re.match(r'^R\d', desc_upper) or '-SLD' in desc_upper:
         return 'Rotor'
 
     # Exclude bearings (not stators)
