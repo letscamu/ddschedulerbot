@@ -102,7 +102,7 @@ Located in `debugging-test-uploads/`:
 
 - **Production Cloud Run:** `ddschedulerbot`, auto-deploys from `master`
 - **Dev Cloud Run:** `ddschedulerbot-dev`, auto-deploys from `dev`
-- **GCP Project:** `ddschedulerbot` (account: `sean@figsocap.com`)
+- **GCP Project:** `ddschedulerbot` (account: `sean@consultantbot.bar`)
 - **GCS Buckets:** `gs://ddschedulerbot-files` (prod), `gs://ddschedulerbot-files-dev` (dev)
 - **Domain:** dynabot.biz
 - **Timezone:** `TZ=America/Chicago` in both workflow env blocks

@@ -12,7 +12,7 @@
 - **Project ID:** ddschedulerbot
 - **Project Number:** 969733401480
 - **Region:** us-central1
-- **GCP Account:** sean@figsocap.com (consultantbot.bar org)
+- **GCP Account:** sean@consultantbot.bar (consultantbot.bar org)
 - **GCS Bucket (prod):** `gs://ddschedulerbot-files`
 - **GCS Bucket (dev):** `gs://ddschedulerbot-files-dev`
 - **CI/CD Service Account:** `github-actions-sa@ddschedulerbot.iam.gserviceaccount.com`
