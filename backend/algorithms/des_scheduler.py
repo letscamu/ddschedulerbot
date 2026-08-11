@@ -543,6 +543,14 @@ def create_injection_machines() -> List[InjectionMachine]:
     ]
 
 
+# Rubber types the Desma injection line can actually run. Anything else in the
+# core mapping (XP, 1A, NED1, HN-SR, ...) is treated as obsolete/bad data: such
+# orders are routed to pending with a reason for planner validation instead of
+# being fed to the blast loop (where an unrunnable rubber type can never clear
+# the injection-bottleneck check and would burn empty takt slots indefinitely).
+VALID_INJECTION_RUBBER = {"HR", "XE", "XR", "XD"}
+
+
 # =============================================================================
 # STATION
 # =============================================================================
@@ -708,7 +716,8 @@ class DESScheduler:
                  core_inventory: Dict, operations: Dict = None,
                  work_schedule: Any = None, working_days: List[int] = None,
                  shift_hours: int = 12, day_configs: Dict = None,
-                 takt_time_minutes: int = 30, wip_orders: List[Dict] = None):
+                 takt_time_minutes: int = 30, wip_orders: List[Dict] = None,
+                 injection_buffer_hours: float = 0.5):
         """
         Initialize the DES scheduler.
 
@@ -727,6 +736,11 @@ class DESScheduler:
         """
         self.orders = orders
         self.wip_orders = wip_orders or []
+        # Max acceptable wait (hours) at injection before a blast is deferred.
+        # Represents the realistic WIP buffer allowed to queue in front of the
+        # Desma line. 0.5h was pathologically tight (collapsed near-term to ~5/day);
+        # tune to match real sustained throughput (~50-60 blasts/day, both shifts).
+        self.injection_buffer_hours = injection_buffer_hours
         self.core_mapping = core_mapping
         self.core_inventory = self._init_core_inventory(core_inventory)
         self.operations = operations or {}
@@ -1089,11 +1103,11 @@ class DESScheduler:
             # No machine can run this rubber type at all
             return True, None
 
-        # A machine is available — check if it would cause significant delay
-        # Bottleneck = the part would have to wait more than 1 takt period (30 min)
-        # for injection after arriving at the injection station
+        # A machine is available — check if it would cause significant delay.
+        # Bottleneck = the part would wait longer than the acceptable injection
+        # queue buffer after arriving at the injection station.
         wait_time = (best_available - est_arrival).total_seconds() / 3600
-        if wait_time > 0.5:  # More than 30 min wait = bottleneck
+        if wait_time > self.injection_buffer_hours:  # acceptable injection queue exceeded
             return True, None
 
         return False, best_machine_id
@@ -1243,11 +1257,23 @@ class DESScheduler:
                     'core_number_needed': core_number
                 })
             else:
-                schedulable.append({
-                    'order': order,
-                    'core_number': core_number,
-                    'part_data': part_data
-                })
+                # Core exists — but if the part's rubber type isn't runnable on
+                # any injection machine, it can never be scheduled. Surface it as
+                # pending (for PN validation) rather than stalling the blast loop.
+                rb = part_data.get('rubber_type') if part_data else None
+                rb_str = str(rb).strip().upper() if rb is not None else ''
+                if rb_str and rb_str != 'NAN' and rb_str not in VALID_INJECTION_RUBBER:
+                    pending.append({
+                        **order,
+                        'reason': f'Invalid/obsolete rubber type "{rb}" — no injection machine runs it (validate PN)',
+                        'core_number_needed': core_number
+                    })
+                else:
+                    schedulable.append({
+                        'order': order,
+                        'core_number': core_number,
+                        'part_data': part_data
+                    })
 
         return schedulable, pending
 
@@ -1559,7 +1585,9 @@ class DESScheduler:
                     current_slot, takt_minutes / 60.0
                 )
             elif all_blocked_by_bottleneck:
-                # All orders have cores but injection is full — skip one takt slot
+                # All remaining orders have cores but injection is full — advance
+                # one takt slot. The acceptable backlog is governed by
+                # self.injection_buffer_hours (see _check_injection_bottleneck).
                 consecutive_empty += 1
                 if consecutive_empty >= max_empty_slots:
                     print(f"[WARN] Scheduling stopped: {consecutive_empty} consecutive "

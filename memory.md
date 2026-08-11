@@ -1,7 +1,45 @@
 # DDSchedulerBot / DynaBot — Session Memory
 
-**Last updated:** March 8, 2026
-**Current deployed version:** MVP 2.0.0 (on master + dev, deployed to Cloud Run)
+**Last updated:** June 24, 2026
+**Current deployed version:** MVP 2.0.5 (CLAUDE.md); engine investigation on branch `fix/scheduler-undersched-diag`
+
+---
+
+## Session: June 2026 — Scheduler under-scheduling / wrong-timing investigation
+
+**Symptom:** today's run (5day/12h, OSO/SDR 06-22) put only ~40 blasts in 2 days (Sean expects 60–70),
+456 orders Unscheduled, big late "clump." Built offline harness `tools/local_run.py` (no Flask/GCS;
+point `--data-dir` at a folder of inputs) — reproduces live output exactly (422 sched / 456 unsched).
+
+**Root-cause decomposition (was MOSTLY data/config, NOT engine bugs):**
+- 174 parts not in core mapping (183/199 numeric; genuine absence, not format) → no core → unscheduled.
+- 152 orders with rubber type no Desma runs (XP 121, 1A, NED1, blank). Only **HR/XE/XR/XD valid**;
+  XP/1A/NED1 are obsolete-PN/bad data (Sean to validate — exceptions workbook delivered).
+- 74 rotors (`R…/-SLD` descriptions, numeric PNs) leaking past the exclusion filter.
+- Stale core mapping was a RED HERRING (524→529 cores w/ fresh). Takt + changeovers also red herrings
+  (engine plans **0** changeovers; machine-selection already avoids them).
+
+**Fixes landed (verified, tests 56 pass):** rotor exclusion via description (`order_filters.py`);
+invalid-rubber orders routed to pending w/ reason (`des_scheduler._classify_orders`);
+`injection_buffer_hours` knob (default 0.5 = no change; ≥2 clears a 33-order stall + 500-empty-slot stop).
+
+**THE UNSOLVED CORE PROBLEM (next session — injection redesign):** near-term collapses to ~5/day and
+CANNOT be tuned out via takt/buffer/changeovers. Proven: bottleneck-OFF → 96/2days, ON → 30; tuning
+buffer/takt stays pinned at ~29. Cause = injection-admission ARCHITECTURE: blast admission gates on a
+machine reservation using a 3.85h **working-time** lead (`_estimate_injection_arrival` via advance_time)
+mixed with wall-clock machine bookings (`_reserve_injection_machine` uses raw timedelta) → day-1 arrivals
+collapse into one window injection can't drain. Real capacity ≈ 50–60/day (both shifts, 25–30/shift;
+3 machines/rubber ÷ 0.8–1.5h inj time). **Fix = model injection as a true capacity-limited station**
+(likely in the event-loop sim, not the blast-admission heuristic). Key spots: `_check_injection_bottleneck`
+/ `_reserve_injection_machine` / `_estimate_injection_arrival` (des_scheduler.py ~1036-1127),
+blast loop `_schedule_blast_arrivals` (~1395-1620).
+
+**Data actions for Sean:** validate 152 obsolete-PN list; add ~125 missing stators to mapping; upload
+fresh Core Mapping to prod via app (prod reads GCS, not the repo copy). Local feedback test store
+(`data/state/user_feedback.json`, not git-tracked) has old March test data → 1 local feedback test fails;
+prod GCS unaffected.
+
+---
 
 ---
 
